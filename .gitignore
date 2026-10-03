@@ -1,0 +1,43 @@
+venv/
+config_local.py
+db_bobitools.db
+db_bobitools.db-journal
+db_bobitools.db-wal
+db_bobitools.db-shm
+bobitools.log
+
+# Clé maître du coffre à identifiants (plugin « coffre ») : locale à l'instance,
+# jamais versionnée ni distribuée. La perdre = perdre tous les mots de passe.
+coffre.key
+backups/
+static/uploads/*
+!static/uploads/.gitkeep
+__pycache__/
+*.pyc
+.DS_Store
+.impeccable/config.local.json
+.impeccable/hook.cache.json
+
+# Archives de versions des plugins ET des services : mécanisme de rollback INTERNE
+# à l'app (activate_version / UI). Gardées sur disque, hors git — l'historique git
+# fait déjà office d'historique de code. Voir DESIGN.md / release.sh.
+plugins/*/versions/
+services/*/versions/
+
+# Artefacts de build (zip de distribution / MAJ) et identité de build par-instance :
+# régénérés à la demande, jamais versionnés. Voir app/builder.py / app/updater.py.
+dist/
+build_info.json
+deploy_info.json
+UPDATE_PENDING
+emberplus_trees.json
+emberplus_trees.json.tmp
+swp08_vlan_plan.json
+
+# Données du service « Démarrage réseau » : binaires iPXE et configuration dnsmasq
+# engendrée. Cache reconstructible (bouton « Récupérer les binaires iPXE »), jamais versionné.
+netboot_data/
+
+# Contrats publiés par les plugins in-process, lus par les conteneurs via un volume
+# nommé lié à ce répertoire. C'est de la DONNÉE d'exécution, jamais du code.
+contracts/

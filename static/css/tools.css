@@ -1,0 +1,118 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+   Copyright (C) 2026 BOBI SAS, France — styles du shell d'outils Bobi.Tools.
+   (Réutilise les tokens de base.css ; aucun token nouveau.) */
+
+/* ── Toasts (génériques, montés par BT.toast) ───────────────────────── */
+.toast-host { position: fixed; bottom: 18px; right: 18px; display: flex;
+    flex-direction: column; gap: 8px; z-index: 300; }
+.toast { padding: 10px 14px; border-radius: var(--radius-small);
+    font-size: 0.9em; box-shadow: var(--shadow); max-width: 380px; }
+.toast.info { background: var(--accent-soft); color: var(--accent); }
+.toast.warning { background: var(--status-warning-bg); color: var(--status-warning-fg); }
+.toast.error { background: var(--status-stopped-bg); color: var(--status-stopped-fg); }
+
+/* ── Onglets de section (réutilise .tabs/.tab de base.css) ───────────── */
+.tp-tabs { display: flex; gap: 4px; flex-wrap: wrap; margin: 8px 0 14px; }
+
+/* ── Zone de montage de l'UI d'un outil ─────────────────────────────── */
+.bt-tool-host { display: flex; flex-direction: column; gap: 10px; }
+.tp-mount, .bt-tool-mount { min-height: 280px; }
+.tp-mount.empty, .bt-tool-mount .tp-mount.empty {
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-muted); border: 1px dashed var(--border-soft);
+    border-radius: var(--radius); padding: 40px; }
+
+/* ── Barre d'état d'un outil Docker ─────────────────────────────────── */
+.bt-tool-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 8px 12px; border: 1px solid var(--border-soft);
+    border-radius: var(--radius-small); background: var(--bg-soft, var(--bg-input));
+    font-size: 0.88em; }
+.bt-tool-bar .bt-state { color: var(--text-muted); font-family: var(--font-mono); }
+/* Dépendance manquante : un avertissement, pas un blocage — l'outil démarre quand même et
+   peut expliquer lui-même ce qui lui manque. La teinte « warning » le distingue d'une
+   panne (rouge) comme d'un fonctionnement normal. */
+.bt-tool-bar .bt-missing-req {
+    background: var(--status-warning-bg); color: var(--status-warning-fg);
+    padding: 2px 8px; border-radius: var(--radius-small); font-size: 0.92em;
+}
+.bt-tool-bar .bt-life:first-of-type { margin-left: auto; }
+.bt-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block;
+    background: var(--text-muted); flex-shrink: 0; }
+.bt-dot.running { background: var(--status-running-fg); }
+.bt-dot.stopped { background: var(--status-stopped-fg); }
+
+/* ── Vue focus (plein écran bookmarkable) ───────────────────────────── */
+/* En focus, on masque la nav complète : le focus-head fait office de seule
+   barre (logo Bobi.Tools + nom de l'outil + retour à l'accueil). On retire
+   aussi le padding du body pour une barre bord-à-bord (vrai plein écran). */
+body.page-focus { padding: 0; }
+body.page-focus .topnav { display: none; }
+body.page-focus .app-footer { padding-left: 18px; padding-right: 18px; }
+.focus-head { display: flex; align-items: center; gap: 12px;
+    padding: 10px 18px; border-bottom: 1px solid var(--border-soft); }
+.focus-head .focus-brand { text-decoration: none; color: var(--text-strong);
+    font-weight: 700; font-size: 0.95em; letter-spacing: 2px; }
+.focus-head .focus-brand:hover { color: var(--accent); }
+.focus-head .focus-sep { color: var(--text-muted); }
+.focus-head .focus-back { text-decoration: none; color: var(--text-muted);
+    font-size: 0.9em; }
+.focus-head .focus-back:hover { color: var(--accent); }
+.focus-head h1 { margin: 0; font-size: 1.1em; }
+.focus-head .spacer { flex: 1; }
+.focus-body { padding: 16px 18px; }
+
+/* ── Shell de test ──────────────────────────────────────────────────── */
+/* Pleine largeur : les outils (surtout le Plan, dense) utilisent toute la page. */
+.section-wrap { padding: 18px 22px; }
+.section-wrap h1 { margin: 0 0 2px; }
+.section-sub { color: var(--text-muted); font-size: 0.88em; margin-bottom: 6px; }
+.section-open { margin-left: auto; font-size: 0.85em; text-decoration: none; color: var(--accent); }
+
+/* ── Lanceur (page d'accueil) ───────────────────────────────────────────
+   Cartes d'outils : grammaire flat Studio (border + fond au hover, jamais de
+   translation/scale). Une seule action primaire = titre en lien étiré qui
+   couvre la carte ; actions secondaires posées au-dessus. Aucun token nouveau. */
+.home-wrap { padding: 22px; }
+.home-head { margin-bottom: 20px; }
+.home-head h1 { margin: 0 0 4px; }
+.home-head p { color: var(--text-muted); margin: 0; }
+.home-section { margin-top: 26px; }
+/* Title de section Studio : 0.78em UPPERCASE, text-muted (pas un eyebrow décoratif). */
+.home-section h2 { font-size: 0.78em; text-transform: uppercase; letter-spacing: 1px;
+    color: var(--text-muted); margin: 0 0 12px; font-weight: 600; }
+
+.tool-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
+
+.tool-card { position: relative; display: flex; flex-direction: column; gap: 8px;
+    padding: 16px; border: 1px solid var(--border-soft); border-radius: var(--radius);
+    background: var(--bg-elev); color: var(--text);
+    transition: border-color .12s ease, background-color .12s ease; }
+.tool-card:hover { border-color: var(--accent); background: var(--bg-hover); }
+.tool-card:focus-within { border-color: var(--accent); }
+
+.tool-card .tc-top { display: flex; align-items: center; gap: 8px; }
+/* Lien primaire étiré : couvre toute la carte → ouvre l'outil. */
+.tool-card .tc-title { font-weight: 600; font-size: 1.02em; flex: 1;
+    color: var(--text-strong); text-decoration: none; }
+.tool-card .tc-title::after { content: ""; position: absolute; inset: 0; border-radius: var(--radius); }
+.tool-card .tc-title:focus-visible { outline: none; }
+
+.tool-card .tc-rt { font-size: 0.68em; font-family: var(--font-mono); padding: 1px 6px;
+    border-radius: 3px; border: 1px solid var(--border-soft); color: var(--text-muted); }
+.tool-card .tc-desc { color: var(--text-muted); font-size: 0.85em; line-height: 1.4; flex: 1; }
+
+/* Actions secondaires : au-dessus du lien étiré (sinon inaccessibles). */
+.tool-card .tc-actions { display: flex; gap: 12px; margin-top: 4px;
+    position: relative; z-index: 1; }
+.tool-card .tc-actions a { font-size: 0.8em; text-decoration: none; color: var(--text-muted); }
+.tool-card .tc-actions a:hover { color: var(--accent); text-decoration: underline; }
+
+.home-empty { margin-top: 40px; text-align: center; color: var(--text-muted); }
+.home-empty code { background: var(--bg-soft, var(--bg-input)); padding: 2px 6px; border-radius: 3px; }
+.scan-warn { margin-top: 16px; padding: 10px 14px; border-radius: var(--radius);
+    background: var(--status-warning-bg); color: var(--status-warning-fg); font-size: 0.85em; }
+.scan-warn code { font-family: var(--font-mono); }
+
+@media (prefers-reduced-motion: reduce) {
+    .tool-card { transition: none; }
+}

@@ -1,0 +1,55 @@
+{% extends "layout.html" %}
+{% block title %}{{ _('nav.home') }} — Bobi.Tools{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="/static/css/tools.css?v={{ asset_v('css/tools.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="home-wrap">
+  <div class="home-head">
+    <h1>{{ brand.system_name or 'Bobi.Tools' }}</h1>
+    <p>{{ _('home.tagline') }}</p>
+  </div>
+
+  {% if scan_errors %}
+  <div class="scan-warn">
+    ⚠ {{ _('home.scan_errors') }}
+    {% for name, reason in scan_errors.items() %}<div><code>{{ name }}</code> — {{ reason }}</div>{% endfor %}
+  </div>
+  {% endif %}
+
+  {% set ns = namespace(total=0) %}
+  {% for sec in sections %}
+    {% set ns.total = ns.total + sec.plugins|length %}
+    <div class="home-section">
+      <h2>{{ sec.label }}</h2>
+      <div class="tool-grid">
+        {% for m in sec.plugins %}
+        {# Carte = conteneur ; le titre est l'unique lien primaire (étiré sur toute la
+           carte via ::after). Les actions secondaires sont posées au-dessus. Jamais
+           d'ancre dans une ancre (cf. DESIGN.md). #}
+        <article class="tool-card">
+          <div class="tc-top">
+            <a class="tc-title" href="/t/{{ m.type }}">{{ m.label }}</a>
+            <span class="tc-rt">{{ m.runtime or 'inprocess' }}</span>
+          </div>
+          <div class="tc-desc">{{ m.description or '' }}</div>
+          <div class="tc-actions">
+            <a href="/t/{{ m.type }}">⤢ {{ _('home.fullscreen') }}</a>
+            <a href="{{ sec.route }}#{{ m.type }}">{{ _('home.test') }}</a>
+          </div>
+        </article>
+        {% endfor %}
+      </div>
+    </div>
+  {% endfor %}
+
+  {% if ns.total == 0 %}
+  <div class="home-empty">
+    <p>{{ _('home.no_tools') }}</p>
+    {% if has_perm('tools.manage') %}<p>{{ _('home.no_tools_admin') }} <a href="/settings#plugins">{{ _('nav.settings') }}</a>.</p>{% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

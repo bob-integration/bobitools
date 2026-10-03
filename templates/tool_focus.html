@@ -1,0 +1,33 @@
+{% extends "layout.html" %}
+{% block title %}{{ label }} — Bobi.Tools{% endblock %}
+
+{# Vue focus bookmarkable : header minimal + l'outil sur toute la page. Monte la MÊME
+   UI que le shell de test (BT.openTool), sans les onglets ni le chrome complet. #}
+{% block head %}
+<link rel="stylesheet" href="/static/css/tools.css?v={{ asset_v('css/tools.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="focus-head">
+  <a class="focus-brand" href="/">Bobi.Tools</a>
+  <span class="focus-sep">/</span>
+  <h1>{{ label }}</h1>
+  <span class="spacer"></span>
+  <a class="focus-back" href="/">← {{ _('focus.menu') }}</a>
+</div>
+<div class="focus-body">
+  <div class="bt-tool-host" id="focus-host">
+    <div class="tp-mount empty"><div>{{ _('js.loading') }}</div></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/scripts.js?v={{ asset_v('scripts.js') }}"></script>
+<script src="/static/js/bt-grid.js?v={{ asset_v('js/bt-grid.js') }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  BT.openTool({{ type|tojson }}, document.getElementById('focus-host'));
+});
+</script>
+{% endblock %}

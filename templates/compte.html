@@ -1,0 +1,235 @@
+{% extends "layout.html" %}
+{% set page = 'compte' %}
+{% block title %}{{ _('compte.titre') }} — Bobi.Tools{% endblock %}
+
+{# Fiche du compte COURANT, reprise de Bobi.Studio (sans photo, sessions ni monitoring, qui
+   n'existent pas ici). On cherche ses propres réglages dans son propre menu, pas dans
+   l'administration des autres (Réglages → Utilisateurs). #}
+{% block content %}
+<div class="home-head" style="margin-bottom:var(--space-4)">
+    <h1>{{ _('compte.titre') }}</h1>
+</div>
+
+<div class="cpt">
+    <section class="cpt-bloc cpt-bloc--large">
+        <h2>{{ _('compte.identite') }}</h2>
+        <div class="form">
+            <div class="meta cpt-note">{{ _('compte.identite_note') }}</div>
+            <div class="cpt-champs">
+                <div class="row">
+                    <div class="field"><label for="cpt_prenom">{{ _('compte.prenom') }}</label>
+                        <input type="text" id="cpt_prenom" autocomplete="given-name" maxlength="200"></div>
+                    <div class="field"><label for="cpt_nom">{{ _('compte.nom') }}</label>
+                        <input type="text" id="cpt_nom" autocomplete="family-name" maxlength="200"></div>
+                </div>
+                <div class="row">
+                    <div class="field"><label for="cpt_email">{{ _('compte.email') }}</label>
+                        <input type="email" id="cpt_email" autocomplete="email" maxlength="200"></div>
+                </div>
+                <div class="cpt-actions">
+                    <button type="button" class="btn btn-blue" id="cpt_enregistrer">{{ _('compte.enregistrer') }}</button>
+                    <span id="cpt_msg" class="meta" role="status" style="align-self:center"></span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="cpt-bloc">
+        <h2>{{ _('compte.preferences') }}</h2>
+        <div class="form">
+            <div class="meta cpt-note">{{ _('compte.preferences_note') }}</div>
+            <div class="row">
+                <div class="field">
+                    <label for="cpt_lang">{{ _('nav.lang') }}</label>
+                    <select id="cpt_lang">
+                        {% for l in languages %}<option value="{{ l.code }}" {{ 'selected' if l.code == lang }}>{{ l.label }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="cpt_theme">{{ _('nav.theme') }}</label>
+                    <select id="cpt_theme">
+                        <option value="" {{ 'selected' if not current_user.theme }}>{{ _('nav.theme_default') }}</option>
+                        {% for th in themes %}<option value="{{ th.id }}" {{ 'selected' if current_user.theme == th.id }}>{{ th.label.split('—')[0].strip() }}</option>{% endfor %}
+                    </select>
+                </div>
+            </div>
+            <span id="cpt_pref_msg" class="meta" role="status"></span>
+        </div>
+    </section>
+
+    <section class="cpt-bloc">
+        <h2>{{ _('compte.motdepasse') }}</h2>
+        <div class="form">
+            <div class="row">
+                <div class="field"><label for="cpt_pwd_old">{{ _('compte.pwd_ancien') }}</label>
+                    <input type="password" id="cpt_pwd_old" autocomplete="current-password"></div>
+            </div>
+            <div class="row">
+                <div class="field"><label for="cpt_pwd_new">{{ _('compte.pwd_nouveau') }}</label>
+                    <input type="password" id="cpt_pwd_new" autocomplete="new-password"></div>
+                <div class="field"><label for="cpt_pwd_new2">{{ _('compte.pwd_confirmer') }}</label>
+                    <input type="password" id="cpt_pwd_new2" autocomplete="new-password"></div>
+            </div>
+            <div class="cpt-actions">
+                <button type="button" class="btn btn-blue" id="cpt_changer">{{ _('compte.pwd_changer') }}</button>
+                <span id="cpt_pwd_msg" class="meta" role="alert" style="align-self:center"></span>
+            </div>
+        </div>
+    </section>
+
+    {# CE QUE LE RÔLE AUTORISE, en clair et en entier : on découvrait ses droits en SE
+       HEURTANT à un refus ; les montrer répond avant qu'on ne demande. #}
+    <section class="cpt-bloc cpt-bloc--large">
+        <h2>{{ _('compte.acces') }}</h2>
+        <div class="form">
+            <dl class="cpt-dl">
+                <dt>{{ _('compte.identifiant') }}</dt><dd class="mono" id="cpt_username">—</dd>
+                <dt>{{ _('compte.role') }}</dt><dd id="cpt_role">—</dd>
+                <dt>{{ _('compte.groupes') }}</dt><dd id="cpt_groupes">—</dd>
+                <dt>{{ _('compte.cree_le') }}</dt><dd id="cpt_cree">—</dd>
+            </dl>
+            <div class="cpt-sous-titre">{{ _('compte.permissions') }}</div>
+            <div class="cpt-perms" id="cpt_perms"></div>
+            <div class="cpt-sous-titre">{{ _('compte.outils') }}</div>
+            <div class="cpt-perms" id="cpt_outils"></div>
+            <div class="meta cpt-note" style="margin-top:var(--space-3)">{{ _('compte.acces_note') }}</div>
+        </div>
+    </section>
+</div>
+
+<style>
+/* Grille `auto-fit` (comme Studio) : une, deux ou trois colonnes selon la place. Les blocs
+   s'alignent en HAUT, sinon le plus court s'étire et son titre flotte dans le vide. */
+.cpt {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(370px, 100%), 1fr));
+    gap: var(--space-6);
+    align-items: start;
+}
+.cpt-bloc--large { grid-column: 1 / -1; }
+.cpt-bloc h2 { margin: 0 0 var(--space-2); }
+.cpt-bloc > .form { margin-bottom: 0; }
+.cpt-note { margin-bottom: var(--space-3); }
+/* On élargit la page, pas les zones de saisie : un champ de neuf cents pixels pour six
+   lettres se lit comme une erreur de gabarit. */
+.cpt-champs { max-width: 72ch; }
+.cpt-bloc .field { flex: 1 1 200px; min-width: 0; }
+.cpt-bloc .field input { width: 100%; }
+.cpt-bloc .field select { max-width: 34ch; }
+.cpt-actions { display: flex; gap: var(--space-2); margin-top: var(--space-3); }
+.cpt-dl { display: grid; grid-template-columns: auto 1fr; gap: var(--space-2) var(--space-4);
+          margin: 0 0 var(--space-3); }
+.cpt-dl dt { color: var(--text-muted); font-size: 0.88em; }
+.cpt-dl dd { margin: 0; }
+.cpt-sous-titre { color: var(--text-muted); font-size: 0.88em; margin: var(--space-3) 0 var(--space-1); }
+/* Permissions : accordées en clair, refusées estompées ET barrées — jamais la couleur seule. */
+.cpt-perms { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.cpt-perm { font-size: 0.82em; padding: 2px 9px; border-radius: 999px;
+            border: 1px solid var(--border-soft); }
+.cpt-perm.oui { background: var(--status-running-bg); color: var(--status-running-fg);
+                border-color: transparent; }
+.cpt-perm.non { color: var(--text-muted); text-decoration: line-through; }
+.cpt-sr { position: absolute; width: 1px; height: 1px; overflow: hidden;
+          clip: rect(0 0 0 0); white-space: nowrap; }
+</style>
+
+<script>
+(function () {
+    "use strict";
+    const $ = (id) => document.getElementById(id);
+    const T = (k) => window.t(k);
+    // Message posé SUR le formulaire concerné, pas dans un toast : le regard est là.
+    const dire = (el, texte, ok) => {
+        el.textContent = (ok ? '' : '✕ ') + texte;
+        el.style.color = ok ? 'var(--status-running-fg)' : 'var(--status-stopped-fg)';
+    };
+    const json = (method, body) => ({ method, headers: { 'Content-Type': 'application/json' },
+                                      body: JSON.stringify(body) });
+    async function erreurDe(r) {
+        const j = await r.json().catch(() => ({}));
+        return j.error || ('HTTP ' + r.status);
+    }
+
+    let MIN_PWD = 10;
+
+    function puces(zone, liste) {
+        zone.innerHTML = '';
+        if (!liste.length) { zone.textContent = T('js.compte.aucun'); return; }
+        liste.forEach(({ texte, oui, sansEtat }) => {
+            const s = document.createElement('span');
+            s.className = 'cpt-perm ' + (oui ? 'oui' : 'non');
+            s.textContent = texte;
+            if (!sansEtat) {
+                const etat = document.createElement('span');
+                etat.className = 'cpt-sr';
+                etat.textContent = ' (' + T(oui ? 'js.compte.perm_accordee' : 'js.compte.perm_refusee') + ')';
+                s.appendChild(etat);
+            }
+            zone.appendChild(s);
+        });
+    }
+
+    async function charger() {
+        const r = await fetch('/api/me', { cache: 'no-store' });
+        if (!r.ok) return;
+        const m = await r.json();
+        $('cpt_prenom').value = m.prenom;
+        $('cpt_nom').value = m.nom;
+        $('cpt_email').value = m.email;
+        $('cpt_username').textContent = m.username;
+        $('cpt_role').textContent = m.role_label;
+        $('cpt_groupes').textContent = m.groupes.length ? m.groupes.join(', ') : T('js.compte.aucun');
+        $('cpt_cree').textContent = m.created_at ? m.created_at.replace('T', ' ') : '—';
+        MIN_PWD = m.min_password_len || MIN_PWD;
+        // Permissions du cœur, puis celles des outils (« Outil — permission »).
+        puces($('cpt_perms'), m.permissions.map(p => ({ texte: T('js.perm.' + p.cle), oui: p.accordee }))
+            .concat((m.permissions_outils || []).map(p => ({ texte: p.outil + ' — ' + p.label, oui: p.accordee }))));
+        puces($('cpt_outils'), m.outils.map(o => ({ texte: o.label, oui: true, sansEtat: true })));
+    }
+
+    $('cpt_enregistrer').addEventListener('click', async () => {
+        const msg = $('cpt_msg');
+        const r = await fetch('/api/me', json('PATCH', {
+            prenom: $('cpt_prenom').value, nom: $('cpt_nom').value, email: $('cpt_email').value,
+        }));
+        if (r.ok) dire(msg, T('js.compte.enregistre'), true);
+        else dire(msg, await erreurDe(r), false);
+    });
+
+    // Langue et thème : même endpoint que le menu utilisateur ; rechargement pour appliquer.
+    function preference(id, url, cle) {
+        const sel = $(id);
+        const courant = sel.value;
+        sel.addEventListener('change', async () => {
+            sel.disabled = true;
+            const r = await fetch(url, json('POST', { [cle]: sel.value })).catch(() => null);
+            if (r && r.ok) { location.reload(); return; }
+            sel.value = courant; sel.disabled = false;
+            dire($('cpt_pref_msg'), r ? await erreurDe(r) : T('js.compte.erreur'), false);
+        });
+    }
+    preference('cpt_lang', '/api/me/lang', 'lang');
+    preference('cpt_theme', '/api/me/theme', 'theme');
+
+    $('cpt_changer').addEventListener('click', async () => {
+        const msg = $('cpt_pwd_msg');
+        const nouveau = $('cpt_pwd_new').value;
+        if (nouveau !== $('cpt_pwd_new2').value) { dire(msg, T('js.compte.pwd_differents'), false); return; }
+        if (nouveau.length < MIN_PWD) {
+            dire(msg, T('js.compte.pwd_trop_court').replace('{n}', MIN_PWD), false); return;
+        }
+        const r = await fetch('/api/me/password', json('POST', {
+            old_password: $('cpt_pwd_old').value, new_password: nouveau,
+        }));
+        if (r.ok) {
+            ['cpt_pwd_old', 'cpt_pwd_new', 'cpt_pwd_new2'].forEach(id => { $(id).value = ''; });
+            dire(msg, T('js.compte.pwd_change'), true);
+        } else {
+            dire(msg, await erreurDe(r), false);
+        }
+    });
+
+    charger();
+})();
+</script>
+{% endblock %}

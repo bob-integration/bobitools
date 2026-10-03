@@ -1,0 +1,92 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+   Copyright (C) 2026 BOBI SAS, France — contrôles de formulaire Bobi.Tools.
+
+   Règle produit (DESIGN.md) : on n'utilise JAMAIS la case à cocher blanche native.
+   - Feature-toggle (« Activer… », option binaire) → interrupteur iOS via la classe
+     .ios-toggle (définie verbatim dans base.css, partagée avec Studio).
+   - Sélection multiple (listes, matrices, lignes à cocher) → case restylée ci-dessous
+     (carré arrondi + coche accent). C'est le DÉFAUT global : toute <input type=checkbox>
+     sans .ios-toggle prend cette apparence, sur toutes les pages et tous les plugins.
+
+   Chargé globalement par layout.html, APRÈS base.css → remplace le rendu natif sans
+   toucher aux fichiers repris verbatim de Studio. N'utilise que des tokens existants. */
+
+/* Token --bg-soft : surface « douce » récessée (blocs de code, pills, panneaux). Il était
+   référencé un peu partout (base.css, plugins, aide) mais JAMAIS défini → rendu transparent.
+   On le définit ici, mappé sur le token thème-aware --bg-input (le fallback que base.css
+   utilisait déjà), pour qu'il fonctionne identiquement sous les trois thèmes. base.css reste
+   verbatim Studio. */
+:root { --bg-soft: var(--bg-input); }
+
+input[type="checkbox"]:not(.ios-toggle) {
+    appearance: none;
+    -webkit-appearance: none;
+    position: relative;
+    width: 18px;
+    height: 18px;
+    flex: 0 0 auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-small);
+    background: var(--bg-input);
+    cursor: pointer;
+    vertical-align: middle;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+input[type="checkbox"]:not(.ios-toggle):hover {
+    border-color: var(--text-muted);
+}
+input[type="checkbox"]:not(.ios-toggle):checked {
+    background: var(--accent);
+    border-color: var(--accent);
+}
+/* Coche dessinée (contraste = couleur de fond du thème sur le remplissage accent). */
+input[type="checkbox"]:not(.ios-toggle):checked::after {
+    content: "";
+    position: absolute;
+    left: 5px;
+    top: 2px;
+    width: 4px;
+    height: 8px;
+    border: solid var(--bg);
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+}
+input[type="checkbox"]:not(.ios-toggle):indeterminate {
+    background: var(--accent);
+    border-color: var(--accent);
+}
+input[type="checkbox"]:not(.ios-toggle):indeterminate::after {
+    content: "";
+    position: absolute;
+    left: 3px;
+    right: 3px;
+    top: 7px;
+    height: 2px;
+    background: var(--bg);
+    transform: none;
+    border: 0;
+}
+input[type="checkbox"]:not(.ios-toggle):focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+input[type="checkbox"]:not(.ios-toggle):disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    input[type="checkbox"]:not(.ios-toggle) { transition: none; }
+}
+
+/* Filet de sécurité reduced-motion à l'échelle de l'app : neutralise les transitions/animations
+   décoratives partout (nav + tous les plugins) sans rouvrir chaque fichier. base.css garde en
+   plus ses propres media-queries reduced-motion ; celle-ci couvre le reste. */
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}

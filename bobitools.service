@@ -1,0 +1,19 @@
+[Unit]
+Description=Bobi.Tools
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+WorkingDirectory=/opt/bobitools
+ExecStart=/opt/bobitools/venv/bin/python main.py
+Restart=on-failure
+RestartSec=5
+# Le journal applicatif (bobitools.log, tournant) est écrit par l'application elle-même.
+# Ne PAS rediriger ici stdout/stderr vers ce fichier : chaque ligne y était écrite deux fois,
+# et un fichier tenu ouvert par systemd survit aux rotations. Le reste (plantage avant la
+# mise en place du journal, print) va au journal système : journalctl -u bobitools
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

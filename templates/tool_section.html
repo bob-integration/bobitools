@@ -1,0 +1,63 @@
+{% extends "layout.html" %}
+{% block title %}{{ section_label }} — Bobi.Tools{% endblock %}
+
+{# Shell de test d'une section : onglets = outils accessibles, montage pleine page de
+   l'UI via BT.openTool. Bascule par #hash, sans reload. Lien « plein écran » → /t/<type>. #}
+{% block head %}
+<link rel="stylesheet" href="/static/css/tools.css?v={{ asset_v('css/tools.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="section-wrap">
+  <div style="display:flex; align-items:baseline; gap:16px; flex-wrap:wrap">
+    <div>
+      <h1>{{ section_label }}</h1>
+      <div class="section-sub">{{ _('section.test_mode') }}</div>
+    </div>
+    <a class="section-open" id="ps-open" href="#" target="_blank" rel="noopener">⤢ {{ _('section.open_fullscreen') }}</a>
+  </div>
+
+  <div class="tp-tabs" id="ps-tabs"></div>
+  <div class="bt-tool-host" id="ps-host">
+    <div class="tp-mount empty"><div>{{ _('section.pick_hint') }}</div></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/scripts.js?v={{ asset_v('scripts.js') }}"></script>
+<script src="/static/js/bt-grid.js?v={{ asset_v('js/bt-grid.js') }}"></script>
+<script>
+const SECTION_TOOLS = {{ tools | tojson }};   // [{type, label, runtime, description}, …]
+let CUR = null;
+
+function buildTabs(){
+  const tabs = document.getElementById('ps-tabs');
+  tabs.innerHTML = SECTION_TOOLS.map(t =>
+    '<button type="button" class="tab" data-type="'+BT.esc(t.type)+'">'+BT.esc(t.label)+'</button>').join('');
+  tabs.querySelectorAll('.tab').forEach(b => b.onclick = () => activate(b.dataset.type));
+}
+
+function activate(type){
+  if(!SECTION_TOOLS.some(t => t.type === type)) type = (SECTION_TOOLS[0]||{}).type;
+  if(!type || type === CUR) return;
+  const host = document.getElementById('ps-host');
+  if(CUR) BT.closeTool(CUR, host);
+  CUR = type;
+  if(history.replaceState) history.replaceState(null, '', '#'+type); else location.hash = type;
+  document.querySelectorAll('#ps-tabs .tab').forEach(t => t.classList.toggle('active', t.dataset.type === type));
+  document.getElementById('ps-open').href = '/t/' + encodeURIComponent(type);
+  BT.openTool(type, host);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  buildTabs();
+  const h = (location.hash || '').replace(/^#/, '');
+  activate(SECTION_TOOLS.some(t => t.type === h) ? h : (SECTION_TOOLS[0]||{}).type);
+});
+window.addEventListener('hashchange', () => {
+  const h = (location.hash || '').replace(/^#/, '');
+  if(h && h !== CUR) activate(h);
+});
+</script>
+{% endblock %}

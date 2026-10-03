@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="{{ lang|default('fr') }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Bobi.Tools{% endblock %}</title>
+    <!-- i18n : langue + sous-catalogue JS + helper global t(). Défini tôt pour être dispo
+         avant scripts.js et les page.js des outils. -->
+    <script>
+        window.LANG = {{ (lang|default('fr'))|tojson }};
+        window.I18N = {{ (js_catalog|default({}))|tojson }};
+        window.t = function(key){ return (window.I18N && window.I18N[key]) || key; };
+        window.BT_TOOLS = {{ (bt_tools_json|default({}))|tojson|safe }};
+        // Copie presse-papier robuste (HTTP clair sur LAN → fallback execCommand).
+        window.copierTexte = function(texte){
+            const fallback = function(){
+                try {
+                    const ta = document.createElement('textarea');
+                    ta.value = texte; ta.style.position = 'fixed'; ta.style.top = '-9999px';
+                    ta.setAttribute('readonly', ''); document.body.appendChild(ta);
+                    ta.select(); ta.setSelectionRange(0, texte.length);
+                    const ok = document.execCommand('copy'); document.body.removeChild(ta);
+                    return ok;
+                } catch (e) { return false; }
+            };
+            if (navigator.clipboard && window.isSecureContext) {
+                return navigator.clipboard.writeText(texte).then(() => true).catch(() => fallback());
+            }
+            return Promise.resolve(fallback());
+        };
+    </script>
+    <link rel="stylesheet" href="/static/css/base.css?v={{ asset_v('css/base.css') }}">
+    <link rel="stylesheet" href="/static/css/nav.css?v={{ asset_v('css/nav.css') }}">
+    {# Contrôles de formulaire Bobi.Tools (cases iOS-like, jamais de case blanche native).
+       Chargé après base.css pour surcharger le rendu natif sans toucher aux CSS verbatim. #}
+    <link rel="stylesheet" href="/static/css/controls.css?v={{ asset_v('css/controls.css') }}">
+    <link rel="stylesheet" href="/static/css/grid.css?v={{ asset_v('css/grid.css') }}">
+    {% block head %}{% endblock %}
+    {% if theme and theme != 'classic' %}
+    <link rel="stylesheet" href="/static/css/theme-{{ theme }}.css?v={{ asset_v('css/theme-' ~ theme ~ '.css') }}">
+    {% endif %}
+    {% if badge_css %}
+    <style>
+    {% for cls, oklch in badge_css.items() %}
+    {% set p = oklch.split() %}
+    .{{ cls }} { background: oklch({{ oklch }} / 14%); color: oklch({{ oklch }}); border-color: oklch({{ oklch }} / 32%); }
+    {% if theme == 'light' %}.{{ cls }} { background: oklch(calc({{ p[0] }} - 0.33) {{ p[1] }} {{ p[2] }} / 10%); color: oklch(calc({{ p[0] }} - 0.33) {{ p[1] }} {{ p[2] }}); border-color: oklch(calc({{ p[0] }} - 0.33) {{ p[1] }} {{ p[2] }} / 28%); }{% endif %}
+    {% endfor %}
+    </style>
+    {% endif %}
+    {% if brand and brand.system_name %}<script>document.title += ' · ' + {{ brand.system_name|tojson }};</script>{% endif %}
+</head>
+{% set page = page|default('') %}
+<body class="page-{{ page }}">
+
+    <nav class="topnav">
+        {# Marque en BLOC vertical (comme Bobi.Studio) : logo client à gauche, « Bobi.Tools »
+           puis le nom du système en dessous. C'est aussi le RETOUR À L'ACCUEIL : convention
+           universelle, et le seul repère qui ne bouge jamais d'une page à l'autre. #}
+        <a href="/" class="brand-block"
+           title="{{ brand.location if brand and brand.location else _('nav.home') }}">
+            {% if brand and brand.logo_url %}
+            <img class="brand-logo" src="{{ brand.logo_url }}" alt="{{ brand.org_name or brand.system_name or 'Logo' }}">
+            {% endif %}
+            <span class="brand-names">
+                <span class="brand">Bobi.Tools</span>
+                {% if brand and brand.system_name %}<span class="brand-system">{{ brand.system_name }}</span>{% endif %}
+            </span>
+        </a>
+        <a href="/" class="{{ 'active' if page == 'home' }}">{{ _('nav.home') }}</a>
+        {# Nav dynamique : une entrée par section d'outils accessible (triée par order). #}
+        {% for sec_id, sec in (plugin_sections or {}).items()|sort(attribute='1.order') %}
+        <a href="{{ sec.route }}" class="{{ 'active' if page == sec_id }}">{{ sec.label }}</a>
+        {% endfor %}
+        <span class="spacer"></span>
+        {# Aide : du CHROME, pas une destination métier — une pastille « ? » qui ouvre un petit
+           menu. La VERSION y figure en tête : c'est là qu'on cherche « c'est quoi, cette
+           installation ? », et le menu est atteignable depuis toutes les pages. #}
+        <span class="nav-menu" id="nav-help-menu">
+            <button type="button" class="nav-icon-btn {{ 'active' if page == 'aide' }}"
+                    aria-haspopup="true" aria-expanded="false"
+                    title="{{ _('nav.aide') }}" data-nav-menu-toggle>?</button>
+            <span class="nav-menu-pop" role="menu">
+                <span class="nav-menu-head">Bobi.Tools <small>{{ app_version|default('') }}</small></span>
+                <span class="nav-menu-sep"></span>
+                <a href="/aide" role="menuitem" class="{{ 'active' if page == 'aide' }}">{{ _('nav.aide') }}</a>
+            </span>
+        </span>
+        {% if current_user %}
+        {# Le nom d'utilisateur EST le menu : identité, préférences personnelles (langue,
+           thème), « Mon compte » et déconnexion. #}
+        <span class="nav-menu" id="nav-user-menu">
+            <button type="button" class="nav-user-btn {{ 'active' if page == 'compte' }}"
+                    aria-haspopup="true" aria-expanded="false"
+                    title="{{ current_user.role }}" data-nav-menu-toggle>
+                <span class="nav-user-name">{{ current_user.username }}</span>
+                <span class="nav-caret" aria-hidden="true">▾</span>
+            </button>
+            <span class="nav-menu-pop nav-menu-pop-wide" role="menu">
+                <span class="nav-menu-head">{{ current_user.username }}<small> · {{ current_user.role }}</small></span>
+                {% if languages and languages|length > 1 %}
+                <span class="nav-menu-sep"></span>
+                <span class="nav-menu-field" title="{{ _('nav.lang_title') }}">
+                    <label for="nav-lang">{{ _('nav.lang') }}</label>
+                    <select id="nav-lang">
+                        {% for l in languages %}
+                        <option value="{{ l.code }}" {{ 'selected' if l.code == lang }}>{{ l.label }}</option>
+                        {% endfor %}
+                    </select>
+                </span>
+                {% endif %}
+                <span class="nav-menu-sep"></span>
+                {# Thème : préférence PERSONNELLE (`users.theme`), comme la langue. Le setting
+                   global n'est plus que le DÉFAUT servi à qui n'a rien choisi — d'où l'option
+                   vide en tête. #}
+                <span class="nav-menu-field" title="{{ _('nav.theme_title') }}">
+                    <label for="nav-theme">{{ _('nav.theme') }}</label>
+                    <select id="nav-theme">
+                        <option value="" {{ 'selected' if not current_user.theme }}>{{ _('nav.theme_default') }}</option>
+                        {% for th in themes %}
+                        <option value="{{ th.id }}" {{ 'selected' if current_user.theme == th.id }}>{{ th.label.split('—')[0].strip() }}</option>
+                        {% endfor %}
+                    </select>
+                </span>
+                <span class="nav-menu-sep"></span>
+                <a href="/compte" class="nav-menu-item" role="menuitem">{{ _('nav.compte') }}</a>
+                <a href="/logout" class="nav-menu-logout" role="menuitem"
+                   title="{{ _('nav.logout_title') }}">{{ _('nav.logout') }}</a>
+            </span>
+        </span>
+        {% endif %}
+        {% if has_perm('settings.edit') %}
+        <span class="nav-service" id="nav-service" title="{{ _('layout.service_uptime_title') }}">
+            <span class="nav-service-uptime" id="nav-service-uptime">…</span>
+            <button type="button" id="nav-service-restart" class="nav-service-btn"
+                    aria-label="{{ _('layout.service_restart_title') }}"
+                    title="{{ _('layout.service_restart_title') }}">↻</button>
+        </span>
+        {% endif %}
+        {% if has_perm('settings.edit') or has_perm('settings.theme') %}
+        <a href="/settings" class="nav-settings {{ 'active' if page == 'settings' }}">{{ _('nav.settings') }}</a>
+        {% endif %}
+    </nav>
+    <script>
+    (function () {
+        const nav = document.querySelector('.topnav');
+        if (!nav) return;
+
+        /* Barre COLLANTE (repris de Bobi.Studio) : elle reste en haut, et se condense au-delà
+           du premier écran de défilement (padding réduit, bloc de marque replié sur une ligne,
+           ombre portée).
+
+           HYSTÉRÉSIS OBLIGATOIRE. La barre est `position: sticky` : elle compte dans le flux,
+           donc se condenser retire ~25 px AU-DESSUS du contenu visible, et l'ancrage de
+           défilement du navigateur (overflow-anchor) baisse scrollY d'autant. Avec un seuil
+           unique, la barre se rétendait aussitôt, l'ancrage remontait scrollY… en boucle,
+           figée à mi-course. Deux seuils séparés par une bande plus large que la perte de
+           hauteur : on condense au-delà de 56 px, on ne rétend qu'en revenant en haut (8 px). */
+        const SEUIL_ETEND = 8;
+        let SEUIL_CONDENSE = 56;
+        let condensed = false;
+        function onScroll() {
+            const y = window.scrollY;
+            const doit = condensed ? y > SEUIL_ETEND : y > SEUIL_CONDENSE;
+            if (doit === condensed) return;
+            condensed = doit;
+            nav.classList.toggle('condensed', doit);
+        }
+        window.addEventListener('scroll', onScroll, { passive: true });
+
+        /* La perte de hauteur dépend de la police et de la longueur du nom du système : on la
+           MESURE en fin de transition et on élargit le seuil haut si besoin (jamais l'inverse). */
+        let hauteurEtendue = nav.offsetHeight;
+        nav.addEventListener('transitionend', function () {
+            const h = nav.offsetHeight;
+            if (!condensed) { hauteurEtendue = h; return; }
+            const perte = hauteurEtendue - h;
+            if (perte > 0 && SEUIL_ETEND + perte + 16 > SEUIL_CONDENSE)
+                SEUIL_CONDENSE = SEUIL_ETEND + perte + 16;
+        });
+
+        onScroll();
+
+        /* Menus déroulants (« ? » et nom d'utilisateur) : un seul ouvert à la fois, fermé au
+           clic extérieur et à Échap. */
+        const menus = Array.from(nav.querySelectorAll('.nav-menu'));
+        function fermerTout(sauf) {
+            menus.forEach(m => {
+                if (m === sauf) return;
+                m.classList.remove('open');
+                const b = m.querySelector('[data-nav-menu-toggle]');
+                if (b) b.setAttribute('aria-expanded', 'false');
+            });
+        }
+        menus.forEach(m => {
+            const btn = m.querySelector('[data-nav-menu-toggle]');
+            if (!btn) return;
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const ouvert = m.classList.toggle('open');
+                btn.setAttribute('aria-expanded', ouvert ? 'true' : 'false');
+                fermerTout(ouvert ? m : null);
+            });
+            m.addEventListener('click', (e) => e.stopPropagation());
+        });
+        document.addEventListener('click', () => fermerTout(null));
+        document.addEventListener('keydown', (e) => { if (e.key === 'Escape') fermerTout(null); });
+
+        /* Langue et thème : préférences PERSONNELLES. On ne recharge que si le serveur a
+           accepté ; sinon le sélecteur revient sur la valeur en vigueur. */
+        function brancher(id, envoyer, echec) {
+            const sel = document.getElementById(id);
+            if (!sel) return;
+            const courant = sel.value;
+            sel.addEventListener('change', async () => {
+                sel.disabled = true;
+                try {
+                    const r = await envoyer(sel.value);
+                    if (r && r.ok) { location.reload(); return; }
+                    throw new Error('HTTP ' + (r ? r.status : '?'));
+                } catch (e) {
+                    sel.value = courant;
+                    sel.disabled = false;
+                    alert(echec + ' — ' + e.message);
+                }
+            });
+        }
+        const json = (body) => ({ method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify(body) });
+        brancher('nav-lang', (v) => fetch('/api/me/lang', json({ lang: v })),
+                 {{ _('nav.lang_failed')|tojson }});
+        brancher('nav-theme', (v) => fetch('/api/me/theme', json({ theme: v })),
+                 {{ _('nav.theme_failed')|tojson }});
+    })();
+    </script>
+
+    {% block content %}{% endblock %}
+
+    {% if current_user %}
+    <script>
+        // Construite depuis le serveur (cœur + permissions des outils) : une liste codée en
+        // dur oubliait toute permission ajoutée ensuite. COSMÉTIQUE : le serveur décide.
+        window.BT_PERMS = new Set({{ my_perms|default([])|tojson }});
+        window.hasPerm = (p) => window.BT_PERMS.has(p);
+    </script>
+    {% endif %}
+
+    {% if has_perm('settings.edit') %}
+    <script>
+    (function() {
+        const elUp  = document.getElementById('nav-service-uptime');
+        const elBtn = document.getElementById('nav-service-restart');
+        if (!elUp || !elBtn) return;
+        function fmt(s) {
+            s = Math.max(0, s|0);
+            const d = (s/86400)|0; s -= d*86400;
+            const h = (s/3600)|0;  s -= h*3600;
+            const m = (s/60)|0;    const ss = s - m*60;
+            if (d) return `${d}${window.t('js.service.day_abbr')} ${h}h${String(m).padStart(2,'0')}`;
+            if (h) return `${h}h${String(m).padStart(2,'0')}`;
+            if (m) return `${m}m${String(ss).padStart(2,'0')}s`;
+            return `${ss}s`;
+        }
+        let baseUptime = 0, baseAt = Date.now();
+        function tick(){ elUp.textContent = fmt(baseUptime + Math.floor((Date.now()-baseAt)/1000)); }
+        async function refresh(){
+            try { const r = await fetch('/api/service/info', {cache:'no-store'});
+                  if(!r.ok) return; const j = await r.json();
+                  baseUptime = j.uptime_s||0; baseAt = Date.now(); tick(); } catch(e){}
+        }
+        refresh(); setInterval(tick, 1000); setInterval(refresh, 30000);
+        elBtn.addEventListener('click', async () => {
+            if (!confirm(window.t('js.service.restart_confirm'))) return;
+            elBtn.disabled = true; elUp.textContent = window.t('js.service.restarting');
+            try {
+                const r = await fetch('/api/service/restart', {method:'POST'});
+                const j = await r.json().catch(()=>({}));
+                if (!r.ok || !j.ok){ alert(window.t('js.service.fail')+' '+(j.error||r.status)); elBtn.disabled=false; refresh(); return; }
+                const t0 = Date.now();
+                (function waitBack(){
+                    fetch('/api/service/info', {cache:'no-store'})
+                        .then(r => r.ok ? r.json() : Promise.reject())
+                        .then(j => { if (j.uptime_s < (Date.now()-t0)/1000){ baseUptime=j.uptime_s||0; baseAt=Date.now(); elBtn.disabled=false; tick(); } else setTimeout(waitBack, 800); })
+                        .catch(() => setTimeout(waitBack, 800));
+                })();
+            } catch(e){ alert(window.t('js.service.net_error')+' '+e.message); elBtn.disabled=false; }
+        });
+    })();
+    </script>
+    {% endif %}
+
+    {% block scripts %}{% endblock %}
+
+    <footer class="app-footer">
+        {% if brand and (brand.org_name or brand.location) %}
+        <span class="app-footer-org">{{ brand.org_name }}{% if brand.org_name and brand.location %} · {% endif %}{{ brand.location }}</span>
+        {% endif %}
+        <span class="app-footer-attr">Bobi.Tools — made by Bobi</span>
+    </footer>
+</body>
+</html>

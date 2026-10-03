@@ -1,0 +1,2646 @@
+{% extends "layout.html" %}
+{% block title %}{{ _('nav.settings') }} — Bobi.Tools{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="/static/css/tools.css?v={{ asset_v('css/tools.css') }}">
+<style>
+/* `width: 100%` : sans lui le bloc prend la largeur de son contenu (body est en flex),
+   et les barres d'onglets glissent de gauche à droite d'un onglet à l'autre. */
+.set-wrap { padding: 18px 22px; width: 100%; max-width: 1280px; margin: 0 auto; }
+.set-panel { display: none; }
+.set-panel.active { display: block; }
+.set-card { border: 1px solid var(--border-soft); border-radius: var(--radius); padding: 16px; margin-bottom: 16px; background: var(--bg-elev); }
+.set-card h3 { margin: 0 0 12px; font-size: 1em; }
+.frow { display: flex; gap: 12px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
+.frow label { min-width: 160px; color: var(--text-muted); font-size: 0.9em; }
+.frow input[type=text], .frow input[type=email], .frow input[type=password], .frow input[type=time], .frow input[type=number], .frow select {
+    background: var(--bg-input); border: 1px solid var(--border); color: var(--text);
+    padding: 7px 10px; border-radius: var(--radius-small); font: inherit; min-width: 220px; }
+table.set-tbl { width: 100%; border-collapse: collapse; font-size: 0.9em; }
+.set-tbl th, .set-tbl td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--border-soft); }
+.set-tbl th { color: var(--text-muted); font-weight: 600; }
+.i18n-tbl td input { width: 100%; background: var(--bg-input); border: 1px solid transparent;
+    color: var(--text); padding: 5px 7px; border-radius: 3px; font: inherit; }
+.i18n-tbl td input:focus { border-color: var(--accent); outline: none; }
+.i18n-src { color: var(--text-muted); font-size: 0.85em; }
+.pill { font-size: 0.72em; font-family: var(--font-mono); padding: 1px 6px; border-radius: 3px;
+    border: 1px solid var(--border-soft); color: var(--text-muted); }
+.pill.ok { color: var(--status-running-fg); border-color: currentColor; }
+.pill.warn { color: var(--status-warning-fg); border-color: currentColor; }
+.access-roles label { min-width: auto; display: inline-flex; gap: 4px; align-items: center; margin-right: 10px; }
+/* Groupes autorisés : second niveau sous les rôles, détaché par un filet discret. */
+.acc-groups { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border-soft); }
+.acc-groups .muted { margin-right: 6px; }
+#groups-tbl td { vertical-align: top; }
+#groups-tbl summary { cursor: pointer; }
+.muted { color: var(--text-muted); font-size: 0.85em; }
+/* Rôles & périmètres */
+.rl-tbl th, .rl-tbl td { text-align: center; }
+.rl-tbl th:first-child, .rl-tbl td:first-child { text-align: left; }
+.rl-tbl th small { display: block; font-weight: 400; color: var(--text-muted); }
+.rl-tbl tr.rl-group td { text-align: left; font-weight: 600; color: var(--text-muted);
+    padding-top: 14px; font-size: 0.82em; letter-spacing: 0.5px; text-transform: uppercase; }
+.rl-tbl td.rl-perm small { display: block; color: var(--text-muted); }
+.rl-tbl tfoot td { font-size: 0.85em; color: var(--text-muted); vertical-align: top; }
+.rl-warn { background: var(--status-warning-bg); color: var(--status-warning-fg);
+    padding: 6px 10px; border-radius: var(--radius-small); margin-bottom: 10px; }
+.rl-warn[hidden], #ru-editor[hidden] { display: none; }
+.ru-checks { display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.ru-modes { display: flex; flex-direction: column; gap: 6px; flex: 1; }
+.ru-modes label { min-width: auto !important; display: flex; gap: 8px; align-items: baseline; color: var(--text) !important; }
+.ru-badge { font-size: 0.75em; padding: 1px 8px; border-radius: 999px; margin-left: 6px; font-weight: 600; }
+.ru-badge.reserve { background: var(--accent-soft); color: var(--accent); }
+.ru-badge.allow { background: var(--status-warning-bg); color: var(--status-warning-fg); }
+.ru-badge.deny { background: var(--status-stopped-bg); color: var(--status-stopped-fg); }
+.ru-checks label { min-width: auto !important; display: inline-flex; gap: 6px; align-items: center;
+    color: var(--text) !important; }
+.ru-who { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 10px 18px; flex: 1; }
+.ru-who b { display: block; margin-bottom: 4px; font-weight: 600; }
+.ru-res { border: 1px solid var(--border-soft); border-radius: var(--radius-small); padding: 10px 12px; margin-bottom: 10px; }
+.ru-res h4 { margin: 0 0 6px; font-size: 0.92em; }
+.ru-res > label { display: inline-flex; gap: 6px; align-items: center; margin-right: 14px; }
+.ru-res .ru-sub { margin-top: 6px; }
+.ru-rule { border-top: 1px solid var(--border-soft); padding: 8px 0; display: flex; gap: 12px; align-items: flex-start; }
+.ru-rule:first-child { border-top: 0; }
+.ru-rule .ru-body { flex: 1; font-size: 0.9em; }
+.ru-rule .ru-body div { margin: 1px 0; }
+/* Déploiement : bandeau de retour arrière, sélection du paquet, tableau de la flotte. */
+.dep-rollback { display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    border-color: var(--status-warning-fg); background: var(--status-warning-bg); }
+.dep-rollback[hidden], .dep-sub[hidden] { display: none; }
+.dep-sel { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
+    gap: 16px; margin-bottom: 14px; }
+.dep-sel-h { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.dep-sel-h b { margin-right: auto; }
+.dep-sel-list { max-height: 240px; overflow: auto; border: 1px solid var(--border-soft);
+    border-radius: var(--radius-small); padding: 6px 10px; }
+.dep-sel-list label { display: flex; gap: 8px; align-items: center; padding: 2px 0; font-size: 0.9em; }
+.dep-sel-list .pill { margin-left: auto; }
+.fl-add input { min-width: 0; flex: 1 1 160px; }
+.fl-ver-diff { color: var(--status-warning-fg); }
+.fl-banner { padding: 8px 12px; border-radius: var(--radius-small); margin-bottom: 12px;
+    background: var(--status-warning-bg); border: 1px solid var(--status-warning-fg); }
+.fl-st-updated { color: var(--status-warning-fg); }
+.fl-st-added { color: var(--status-running-fg); }
+.fl-st-removed { color: var(--status-stopped-fg); }
+.fl-st-unchanged { color: var(--text-muted); }
+/* Tableau plugins : alignement haut + colonne Actions qui passe à la ligne sans chevaucher */
+#plugins-tbl td { vertical-align: top; }
+.pl-run { font-size: 0.8em; color: var(--text-muted); margin-top: 4px; }
+.pl-warn { color: var(--status-stopped-fg); }
+.pl-ok { color: var(--status-running-fg); }
+.pl-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+/* Éditeur de profil canonique Ember+ */
+.ep-prof-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+.ep-spacer { flex: 1 1 auto; }
+.ep-block { border: 1px solid var(--border-soft); border-radius: var(--radius); margin-bottom: 10px; overflow: hidden; }
+.ep-block-h { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px 10px; background: var(--bg-soft); }
+.ep-block-h code { font-family: var(--font-mono); font-size: 0.85em; color: var(--accent); }
+.ep-params { margin: 0; }
+.ep-params td { vertical-align: middle; }
+.ep-params input, .ep-params select { background: var(--bg-input); border: 1px solid var(--border-soft);
+    color: var(--text); padding: 5px 7px; border-radius: 3px; font: inherit; width: 100%; }
+/* TSL : lampes de tally (3 par afficheur) + trame en hexadécimal commenté.
+   Les quatre états reprennent les couleurs sémantiques du socle (running/stopped/warning/
+   unknown), donc suivent les thèmes sans valeur littérale. */
+.tsl-lamp { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 3px;
+    border: 1px solid var(--border-soft); vertical-align: middle; }
+.tsl-t0 { background: transparent; }
+.tsl-t1 { background: var(--status-stopped-fg); border-color: var(--status-stopped-fg); }
+.tsl-t2 { background: var(--status-running-fg); border-color: var(--status-running-fg); }
+.tsl-t3 { background: var(--status-warning-fg); border-color: var(--status-warning-fg); }
+.tsl-frame { font-family: var(--font-mono); font-size: 0.82em; border-collapse: collapse; }
+.tsl-frame td { padding: 2px 10px 2px 0; border: 0; white-space: nowrap; }
+.tsl-frame td.tsl-hx { color: var(--accent); }
+.tsl-frame td.tsl-note { color: var(--text-muted); white-space: normal; }
+.tsl-warn { background: var(--status-warning-bg); color: var(--status-warning-fg);
+    padding: 8px 10px; border-radius: var(--radius-small); margin-bottom: 12px; font-size: 0.85em; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="set-wrap">
+  <h1>{{ _('nav.settings') }}</h1>
+  {% if not theme_only %}
+  {# Deux niveaux, comme Bobi.Studio : les FAMILLES (niveau 0), puis les onglets de la
+     famille choisie (niveau 1). Quatorze onglets sur une seule ligne mêlaient l'apparence,
+     les protocoles et la sauvegarde ; regroupés, chaque ligne se lit d'un coup d'œil.
+     Le hash reste `#<onglet>` : les liens existants (/settings#plugins…) restent valides. #}
+  <div class="tabs set-groups" id="set-groups" role="tablist" aria-label="{{ _('settings.groups_aria') }}">
+    <button class="tab active" data-g="general">{{ _('settings.group_general') }}</button>
+    <button class="tab" data-g="outils">{{ _('settings.group_tools') }}</button>
+    <button class="tab" data-g="protocoles">{{ _('settings.group_protocols') }}</button>
+    <button class="tab" data-g="systeme">{{ _('settings.group_system') }}</button>
+  </div>
+  <div class="tabs set-subnav" id="set-tabs" role="tablist" aria-label="{{ _('settings.tabs_aria') }}">
+    <button class="tab active" data-t="appearance">{{ _('settings.tab_appearance') }}</button>
+    <button class="tab" data-t="users">{{ _('settings.tab_users') }}</button>
+    <button class="tab" data-t="roles">{{ _('settings.tab_roles') }}</button>
+    <button class="tab" data-t="plugins">{{ _('settings.tab_plugins') }}</button>
+    <button class="tab" data-t="rules">{{ _('settings.tab_rules') }}</button>
+    {% if tool_config_schemas %}<button class="tab" data-t="toolcfg">{{ _('settings.tab_toolcfg') }}</button>{% endif %}
+    <button class="tab" data-t="services">{{ _('settings.tab_services') }}</button>
+    {# Onglet d'un service : seulement si le service est INSTALLÉ (une instance, ou le dépôt
+       public, peut ne pas les avoir tous). On ne masque que le bouton : le panneau reste dans la
+       page, son JS ne trouve donc jamais d'élément manquant ; la famille filtre ses onglets. #}
+    <button class="tab" data-t="controllers">{{ _('settings.tab_controllers') }}</button>
+    {% if 'emberplus' in services_present %}<button class="tab" data-t="emberplus">{{ _('settings.tab_emberplus') }}</button>{% endif %}
+    {% if 'tsl' in services_present %}<button class="tab" data-t="tsl">{{ _('settings.tab_tsl') }}</button>{% endif %}
+    {% if 'swp08' in services_present %}<button class="tab" data-t="swp08">{{ _('settings.tab_swp08') }}</button>{% endif %}
+    <button class="tab" data-t="network">{{ _('settings.tab_network') }}</button>
+    <button class="tab" data-t="backup">{{ _('settings.tab_backup') }}</button>
+    <button class="tab" data-t="deploy">{{ _('settings.tab_deploy') }}</button>
+    {% if 'mail' in services_present %}<button class="tab" data-t="mail">{{ _('settings.tab_mail') }}</button>{% endif %}
+    {% if 'ntfy' in services_present %}<button class="tab" data-t="ntfy">{{ _('settings.tab_ntfy') }}</button>{% endif %}
+    <button class="tab" data-t="audit">{{ _('settings.tab_audit') }}</button>
+    <button class="tab" data-t="i18n">{{ _('settings.tab_i18n') }}</button>
+  </div>
+  {% endif %}
+
+  <!-- Apparence -->
+  <div class="set-panel active" id="p-appearance">
+    <div class="set-card">
+      <h3>{{ _('settings.appearance') }}</h3>
+      <div class="frow"><label for="s-theme">{{ _('settings.theme') }}</label>
+        <select id="s-theme">{% for th in themes %}<option value="{{ th.id }}"{{ ' selected' if th.id == current_theme }}>{{ th.label }}</option>{% endfor %}</select></div>
+      {% if not theme_only %}
+      <div class="frow"><label for="s-lang">{{ _('settings.lang_default') }}</label>
+        <select id="s-lang"></select></div>
+      {% endif %}
+    </div>
+    {% if not theme_only %}
+    <div class="set-card">
+      <h3>{{ _('settings.brand') }}</h3>
+      <div class="frow"><label for="b-system">{{ _('settings.brand_system') }}</label><input type="text" id="b-system"></div>
+      <div class="frow"><label for="b-org">{{ _('settings.brand_org') }}</label><input type="text" id="b-org"></div>
+      <div class="frow"><label for="b-location">{{ _('settings.brand_location') }}</label><input type="text" id="b-location"></div>
+      <div class="frow"><label for="b-logo">{{ _('settings.brand_logo') }}</label>
+        <input type="file" id="b-logo" accept="image/*"><span id="b-logo-cur" class="muted"></span></div>
+    </div>
+    {% endif %}
+    <button class="btn btn-blue" id="save-appearance">{{ _('settings.save') }}</button>
+  </div>
+
+  {% if not theme_only %}
+  <!-- Utilisateurs -->
+  <div class="set-panel" id="p-users">
+    <div class="set-card">
+      <h3>{{ _('settings.users') }}</h3>
+      <table class="set-tbl" id="users-tbl"><thead><tr>
+        <th>{{ _('settings.username') }}</th><th>{{ _('settings.role') }}</th><th></th></tr></thead>
+        <tbody></tbody></table>
+    </div>
+    <div class="set-card">
+      <h3>{{ _('settings.user_new') }}</h3>
+      <div class="frow"><label for="nu-username">{{ _('settings.username') }}</label><input type="text" id="nu-username"></div>
+      <div class="frow"><label for="nu-password">{{ _('settings.password') }}</label><input type="password" id="nu-password"></div>
+      <div class="frow"><label for="nu-role">{{ _('settings.role') }}</label><select id="nu-role">
+        {% for rid, rlabel in roles.items() %}<option value="{{ rid }}">{{ rlabel }}</option>{% endfor %}</select></div>
+      <button class="btn btn-green" id="add-user">{{ _('settings.user_add') }}</button>
+    </div>
+    <div class="set-card">
+      <h3>{{ _('settings.groups') }}</h3>
+      <div class="muted" style="margin-bottom:10px">{{ _('settings.groups_hint') }}</div>
+      <table class="set-tbl" id="groups-tbl"><thead><tr>
+        <th>{{ _('settings.group_name') }}</th><th>{{ _('settings.group_members') }}</th><th></th></tr></thead>
+        <tbody></tbody></table>
+      <div class="frow" style="margin-top:12px">
+        <input type="text" id="ng-name" placeholder="{{ _('settings.group_name') }}" aria-label="{{ _('settings.group_name') }}">
+        <input type="text" id="ng-desc" placeholder="{{ _('settings.group_desc') }}" aria-label="{{ _('settings.group_desc') }}">
+        <button class="btn btn-green" id="add-group">{{ _('settings.group_add') }}</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Rôles : matrice rôles × permissions (comme les habilitations de Bobi.Studio) -->
+  <div class="set-panel" id="p-roles">
+    <div class="set-card">
+      <h3>{{ _('settings.roles_title') }}</h3>
+      <div class="muted" style="margin-bottom:10px">{{ _('settings.roles_hint') }}</div>
+      <div class="muted rl-warn" id="rl-mine" hidden>{{ _('settings.roles_mine') }}</div>
+      <div style="overflow-x:auto"><table class="set-tbl rl-tbl" id="rl-tbl"></table></div>
+      <div class="frow" style="margin-top:14px">
+        <input type="text" id="rl-new-id" placeholder="{{ _('settings.roles_new_id') }}" aria-label="{{ _('settings.roles_new_id') }}" style="min-width:160px">
+        <input type="text" id="rl-new-label" placeholder="{{ _('settings.roles_new_label') }}" aria-label="{{ _('settings.roles_new_label') }}">
+        <button class="btn btn-green btn-sm" id="rl-add">{{ _('settings.roles_add') }}</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Périmètres : qui peut agir sur quelles ressources d'un outil -->
+  <div class="set-panel" id="p-rules">
+    <div class="set-card">
+      <h3>{{ _('settings.rules_title') }}</h3>
+      <div class="muted" style="margin-bottom:10px">{{ _('settings.rules_hint') }}
+        <a href="/aide#droits">{{ _('settings.rules_help') }}</a></div>
+      <div id="ru-list" class="muted">…</div>
+      <button class="btn btn-green btn-sm" id="ru-new" style="margin-top:10px">{{ _('settings.rules_new') }}</button>
+    </div>
+    <div class="set-card" id="ru-editor" hidden>
+      <h3 id="ru-ed-title"></h3>
+      <div class="frow"><label for="ru-tool">{{ _('settings.tool') }}</label><select id="ru-tool"></select></div>
+      <div class="frow"><label>{{ _('settings.rules_mode') }}</label>
+        <div class="ru-modes">
+          <label><input type="radio" name="ru-mode" value="reserve" checked> <b>{{ _('settings.rules_mode_reserve') }}</b>
+            <span class="muted">{{ _('settings.rules_mode_reserve_hint') }}</span></label>
+          <label><input type="radio" name="ru-mode" value="allow"> <b>{{ _('settings.rules_mode_allow') }}</b>
+            <span class="muted">{{ _('settings.rules_mode_allow_hint') }}</span></label>
+          <label><input type="radio" name="ru-mode" value="deny"> <b>{{ _('settings.rules_mode_deny') }}</b>
+            <span class="muted">{{ _('settings.rules_mode_deny_hint') }}</span></label>
+          <a href="/aide#droits" target="_blank" rel="noopener" class="muted">{{ _('settings.rules_help') }}</a>
+        </div></div>
+      <div class="frow"><label>{{ _('settings.rules_perms') }}</label><div id="ru-perms" class="ru-checks"></div></div>
+      <div class="frow"><label>{{ _('settings.rules_who') }}</label>
+        <div class="ru-who">
+          <div><b class="muted">{{ _('settings.rules_roles') }}</b><div id="ru-roles" class="ru-checks"></div></div>
+          <div><b class="muted">{{ _('settings.groups') }}</b><div id="ru-groups" class="ru-checks"></div></div>
+          <div><b class="muted">{{ _('settings.users') }}</b><div id="ru-users" class="ru-checks"></div></div>
+          <div><b class="muted">{{ _('settings.rules_controllers') }}</b>
+            <div id="ru-ctrls" class="ru-checks"></div>
+            <input type="text" id="ru-ctrl" placeholder="{{ _('settings.rules_ctrl_other_ph') }}" aria-label="{{ _('settings.rules_ctrl_other') }}" style="margin-top:6px">
+            <div class="muted">{{ _('settings.rules_controllers_hint') }}</div></div>
+        </div></div>
+      <div id="ru-scope"></div>
+      <div class="frow"><label for="ru-note">{{ _('settings.rules_note') }}</label><input type="text" id="ru-note" maxlength="300" style="min-width:min(420px,100%)"></div>
+      <div class="pl-actions">
+        <button class="btn btn-blue" id="ru-save">{{ _('settings.save') }}</button>
+        <button class="btn" id="ru-cancel">{{ _('settings.fleet_cancel') }}</button>
+        <span class="muted" id="ru-msg"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Plugins -->
+  <div class="set-panel" id="p-plugins">
+    <div class="set-card">
+      <h3>{{ _('settings.tools_installed') }}</h3>
+      <div id="scan-errors"></div>
+      <table class="set-tbl" id="plugins-tbl"><thead><tr>
+        <th>{{ _('settings.tool') }}</th><th>{{ _('settings.runtime') }}</th><th>{{ _('settings.version') }}</th>
+        <th>{{ _('settings.access') }}</th><th></th></tr></thead><tbody></tbody></table>
+    </div>
+    <div class="set-card">
+      <h3>{{ _('settings.tool_import') }}</h3>
+      <div class="frow"><input type="file" id="imp-file" accept=".bobitool,.zip" aria-label="{{ _('settings.tool_import') }}">
+        <button class="btn btn-green" id="imp-btn">{{ _('settings.import') }}</button></div>
+      <div class="muted">{{ _('settings.tool_import_hint') }}</div>
+    </div>
+  </div>
+
+  {% if tool_config_schemas %}
+  <!-- Réglages exposés par les outils (config_schema des plugins) -->
+  <div class="set-panel" id="p-toolcfg">
+    <div class="set-card">
+      <h3>{{ _('settings.tab_toolcfg') }}</h3>
+      <div class="muted" style="margin-bottom:12px">{{ _('settings.toolcfg_intro') }}</div>
+      <div id="toolcfg-forms"></div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Services globaux -->
+  <div class="set-panel" id="p-services">
+    <div class="set-card">
+      <h3>{{ _('settings.services_installed') }}</h3>
+      <div class="muted" style="margin-bottom:12px">{{ _('settings.services_hint') }}</div>
+      <div id="svc-scan-errors"></div>
+      <table class="set-tbl" id="services-tbl"><thead><tr>
+        <th>{{ _('settings.service') }}</th><th>{{ _('settings.version') }}</th><th></th></tr></thead>
+        <tbody></tbody></table>
+    </div>
+    <div class="set-card">
+      <h3>{{ _('settings.service_import') }}</h3>
+      <div class="frow"><input type="file" id="svc-imp-file" accept=".bobitool,.zip" aria-label="{{ _('settings.service_import') }}">
+        <button class="btn btn-green" id="svc-imp-btn">{{ _('settings.import') }}</button></div>
+      <div class="muted">{{ _('settings.service_import_hint') }}</div>
+    </div>
+  </div>
+
+  <!-- Traductions -->
+  <div class="set-panel" id="p-i18n">
+    <div class="set-card">
+      <h3>{{ _('settings.i18n') }}</h3>
+      <div class="frow"><label for="i18n-lang">{{ _('settings.i18n_lang') }}</label>
+        <select id="i18n-lang"></select>
+        <button class="btn" id="i18n-export">{{ _('settings.export') }}</button></div>
+      <table class="set-tbl i18n-tbl"><thead><tr>
+        <th style="width:30%">{{ _('settings.i18n_key') }}</th><th style="width:35%">{{ _('settings.i18n_source') }}</th>
+        <th style="width:35%">{{ _('settings.i18n_value') }}</th></tr></thead>
+        <tbody id="i18n-rows"></tbody></table>
+    </div>
+  </div>
+
+  <!-- Journal -->
+  <div class="set-panel" id="p-audit">
+    <div class="set-card">
+      <h3>{{ _('settings.audit') }}</h3>
+      <div class="frow">
+        <label for="a-tool">{{ _('settings.audit_tool') }}</label><select id="a-tool"><option value="">{{ _('settings.all') }}</option></select>
+        <button class="btn" id="a-refresh" aria-label="{{ _('settings.refresh') if _('settings.refresh') != 'settings.refresh' else 'Rafraîchir' }}">↻</button></div>
+      <table class="set-tbl"><thead><tr>
+        <th>{{ _('settings.audit_when') }}</th><th>{{ _('settings.audit_user') }}</th>
+        <th>{{ _('settings.audit_toolc') }}</th><th>{{ _('settings.audit_action') }}</th>
+        <th>{{ _('settings.audit_detail') }}</th></tr></thead><tbody id="audit-rows"></tbody></table>
+    </div>
+  </div>
+
+  <!-- Sauvegarde -->
+  <div class="set-panel" id="p-backup">
+    <div class="set-card">
+      <h3>{{ _('settings.backup') }}</h3>
+      <div class="frow"><label for="bk-enabled">{{ _('settings.backup_enabled') }}</label><input type="checkbox" class="ios-toggle" id="bk-enabled"></div>
+      <div class="frow"><label for="bk-time">{{ _('settings.backup_time') }}</label><input type="time" id="bk-time"></div>
+      <div class="frow"><label for="bk-retention">{{ _('settings.backup_retention') }}</label><input type="number" id="bk-retention" min="1" max="365"></div>
+      <button class="btn btn-blue" id="bk-save">{{ _('settings.save') }}</button>
+      <button class="btn btn-green" id="bk-run">{{ _('settings.backup_run') }}</button>
+      <div class="muted" id="bk-status" style="margin-top:8px"></div>
+      <table class="set-tbl" id="bk-list" style="margin-top:10px"></table>
+    </div>
+  </div>
+
+  <!-- Déploiement / Mises à jour -->
+  <!-- Réseau de la machine -->
+  <div class="set-panel" id="p-network">
+    <div class="set-card">
+      <h3>{{ _('settings.network') }}</h3>
+      <div class="muted" style="margin-bottom:12px">{{ _('settings.network_hint') }}</div>
+      <div id="net-owned" class="muted" style="display:none;margin-bottom:12px"></div>
+      <table class="set-tbl" id="net-tbl"><thead><tr>
+        <th>{{ _('settings.network_iface') }}</th>
+        <th>{{ _('settings.network_addr') }}</th>
+        <th>{{ _('settings.network_declared') }}</th>
+        <th>{{ _('settings.network_state') }}</th></tr></thead><tbody></tbody></table>
+      <table class="set-tbl" id="net-sys" style="margin-top:12px"><tbody></tbody></table>
+    </div>
+    <div class="set-card">
+      <h3>{{ _('settings.network_change') }}</h3>
+      <div class="muted" style="margin-bottom:12px">{{ _('settings.network_change_hint') }}</div>
+      <div class="frow"><label for="net-iface">{{ _('settings.network_iface') }}</label>
+        <select id="net-iface"></select></div>
+      <div class="frow"><label for="net-addr">{{ _('settings.network_addr_new') }}</label>
+        <input type="text" id="net-addr" placeholder="10.10.10.221/24"></div>
+      <div class="frow"><label for="net-gw">{{ _('settings.network_gateway') }}</label>
+        <input type="text" id="net-gw" placeholder="10.10.10.254"></div>
+      <div class="frow"><label for="net-persist">{{ _('settings.network_persist') }}</label>
+        <input type="checkbox" class="ios-toggle" id="net-persist" checked></div>
+      <button class="btn btn-blue" id="net-apply">{{ _('settings.network_apply') }}</button>
+      <div id="net-pending" style="display:none;margin-top:12px">
+        <div class="muted" id="net-countdown"></div>
+        <button class="btn btn-blue" id="net-confirm">{{ _('settings.network_confirm') }}</button>
+        <button class="btn" id="net-cancel">{{ _('settings.network_cancel') }}</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="set-panel" id="p-deploy">
+    {# Retour arrière : UN seul bandeau, au-dessus des sous-onglets, parce que la sauvegarde
+       est commune — une mise à jour par un pair comme un import de paquet la créent. Il
+       n'apparaît que si une sauvegarde existe : un bouton qui répond « aucun backup » ne
+       sert qu'à inquiéter. #}
+    <div class="set-card dep-rollback" id="dep-rollback" hidden>
+      <span class="muted" id="dep-rollback-info"></span>
+      <button class="btn btn-orange btn-sm" id="dep-rollback-btn">{{ _('settings.fleet_rollback') }}</button>
+    </div>
+    <div class="subtabs" id="dep-subtabs" role="tablist">
+      <button class="subtab active" data-st="fleet">{{ _('settings.fleet_tab') }}</button>
+      <button class="subtab" data-st="github">{{ _('settings.git_tab') }}</button>
+      <button class="subtab" data-st="package">{{ _('settings.package_tab') }}</button>
+      <button class="subtab" data-st="images">{{ _('settings.images_tab') }}</button>
+    </div>
+
+    <!-- Flotte : mise à jour entre instances (pull/push), comme Bobi.Studio -->
+    <div class="dep-sub" id="dep-sub-fleet">
+      <div class="muted" style="margin-bottom:12px">{{ _('settings.fleet_hint') }}</div>
+      <div class="set-card">
+        <h3>{{ _('settings.fleet_server') }}</h3>
+        <div class="muted" style="margin-bottom:10px">{{ _('settings.fleet_server_hint') }}</div>
+        <div class="frow"><label for="fl-server">{{ _('settings.fleet_server_enable') }}</label>
+          <input type="checkbox" class="ios-toggle" id="fl-server"></div>
+        <div class="frow"><label for="fl-token">{{ _('settings.fleet_token') }}</label>
+          <input type="text" id="fl-token" autocomplete="off" spellcheck="false" style="font-family:var(--font-mono); min-width:min(380px,100%)">
+          <button class="btn btn-sm" id="fl-token-save">{{ _('settings.save') }}</button>
+          <button class="btn btn-sm" id="fl-token-regen">{{ _('settings.fleet_regen') }}</button>
+          <span class="muted" id="fl-token-msg"></span></div>
+        <div class="muted" id="fl-self"></div>
+      </div>
+      <div class="set-card">
+        <h3>{{ _('settings.fleet_instances') }}</h3>
+        <div class="frow fl-add">
+          <input type="text" id="fl-name" placeholder="{{ _('settings.fleet_name_ph') }}" aria-label="{{ _('settings.fleet_col_name') }}">
+          <input type="text" id="fl-url" placeholder="http://10.0.0.12:5000" aria-label="URL">
+          <input type="text" id="fl-ptoken" placeholder="{{ _('settings.fleet_peer_token_ph') }}" aria-label="{{ _('settings.fleet_peer_token') }}" autocomplete="off">
+          <button class="btn btn-green btn-sm" id="fl-add">{{ _('settings.fleet_add') }}</button>
+        </div>
+        <div class="frow">
+          <input type="text" id="fl-cidr" placeholder="10.0.0.0/24" aria-label="{{ _('settings.fleet_scan_range') }}" style="min-width:180px">
+          <button class="btn btn-sm" id="fl-scan">{{ _('settings.fleet_scan') }}</button>
+          <button class="btn btn-sm" id="fl-refresh">{{ _('settings.fleet_refresh') }}</button>
+        </div>
+        <div class="muted" id="fl-scan-res" style="margin-bottom:8px"></div>
+        <div id="fl-table" class="muted">…</div>
+        <div class="muted" id="fl-msg" role="status" style="margin-top:10px"></div>
+      </div>
+    </div>
+
+    <!-- GitHub : mise à jour de CETTE instance depuis le dépôt -->
+    <div class="dep-sub" id="dep-sub-github" hidden>
+      <div class="set-card">
+        <h3>{{ _('settings.git_title') }}</h3>
+        <div class="muted" style="margin-bottom:12px">{{ _('settings.git_hint') }}</div>
+        <div class="muted" id="git-info">…</div>
+        <div class="pl-actions" style="margin-top:8px">
+          <button class="btn" id="git-check">{{ _('settings.git_check') }}</button>
+          <button class="btn btn-green" id="git-update">{{ _('settings.git_update') }}</button>
+          <button class="btn btn-red" id="git-rollback">{{ _('settings.git_rollback') }}</button>
+        </div>
+        <div class="muted" id="git-status" style="margin-top:10px"></div>
+      </div>
+    </div>
+
+    <!-- Paquet : construire un zip sélectif, ou en importer un (hors ligne) -->
+    <div class="dep-sub" id="dep-sub-package" hidden>
+      <div class="set-card">
+        <h3>{{ _('settings.deploy_build') }}</h3>
+        <div class="muted" style="margin-bottom:12px" id="dep-build-info"></div>
+        <div class="dep-sel">
+          <div>
+            <div class="dep-sel-h"><b>Plugins</b>
+              <button class="btn btn-sm" data-sel="plugins" data-v="1">{{ _('settings.package_all') }}</button>
+              <button class="btn btn-sm" data-sel="plugins" data-v="0">{{ _('settings.package_none') }}</button></div>
+            <div class="dep-sel-list" id="dep-sel-plugins"></div>
+          </div>
+          <div>
+            <div class="dep-sel-h"><b>Services</b>
+              <button class="btn btn-sm" data-sel="services" data-v="1">{{ _('settings.package_all') }}</button>
+              <button class="btn btn-sm" data-sel="services" data-v="0">{{ _('settings.package_none') }}</button></div>
+            <div class="dep-sel-list" id="dep-sel-services"></div>
+          </div>
+        </div>
+        <button class="btn btn-blue" id="dep-build-btn">{{ _('settings.deploy_build_btn') }}</button>
+        <a class="btn" id="dep-dl" href="/api/deploy/download" style="display:none">{{ _('settings.deploy_download') }}</a>
+        <div class="muted" id="dep-build-status" style="margin-top:10px"></div>
+        <div class="muted" style="margin-top:10px">{{ _('settings.deploy_build_hint') }}</div>
+      </div>
+      <div class="set-card">
+        <h3>{{ _('settings.import_title') }}</h3>
+        <div class="muted" style="margin-bottom:12px">{{ _('settings.import_hint') }}</div>
+        <div class="pl-actions">
+          {# id distinct de l'import de plugin (#imp-file, onglet Plugins) : deux éléments du
+             même id, et ce bouton ouvrait le sélecteur de l'autre onglet. #}
+          <input type="file" id="dep-imp-file" accept=".zip,application/zip" style="display:none">
+          <button class="btn" id="imp-pick">{{ _('settings.import_pick') }}</button>
+          <span class="muted" id="imp-name"></span>
+          <button class="btn btn-orange" id="imp-apply" disabled>{{ _('settings.import_apply') }}</button>
+        </div>
+        <div class="muted" id="imp-status" style="margin-top:10px"></div>
+      </div>
+    </div>
+
+    <!-- Images : construire / exporter / importer l'image d'un outil Docker (hors ligne) -->
+    <div class="dep-sub" id="dep-sub-images" hidden>
+      <div class="set-card">
+        <h3>{{ _('settings.images_title') }}</h3>
+        <div class="muted" style="margin-bottom:12px">{{ _('settings.images_hint') }}</div>
+        <div id="img-table" class="muted">…</div>
+      </div>
+      <div class="set-card">
+        <h3>{{ _('settings.images_import_title') }}</h3>
+        <div class="muted" style="margin-bottom:12px">{{ _('settings.images_import_hint') }}</div>
+        <div class="pl-actions">
+          <input type="file" id="img-file" accept=".tar,.gz,.tgz,application/gzip,application/x-tar" style="display:none">
+          <button class="btn" id="img-pick">{{ _('settings.images_import_pick') }}</button>
+          <span class="muted" id="img-name"></span>
+          <button class="btn btn-orange" id="img-import" disabled>{{ _('settings.images_import_btn') }}</button>
+        </div>
+        <div class="muted" id="img-status" role="status" style="margin-top:10px"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Aperçu de mise à jour (Pull/Push) : modale de confirmation -->
+  <div class="modal-overlay" id="fl-modal" style="display:none" role="dialog" aria-modal="true" aria-labelledby="fl-modal-title">
+    <div class="modal-card">
+      <div class="modal-head"><h3 id="fl-modal-title" style="margin:0"></h3>
+        <button class="btn btn-sm" id="fl-modal-x" aria-label="{{ _('settings.fleet_cancel') }}">✕</button></div>
+      <div id="fl-modal-body"></div>
+      <div class="pl-actions" style="justify-content:flex-end; margin-top:16px">
+        <button class="btn" id="fl-modal-cancel">{{ _('settings.fleet_cancel') }}</button>
+        <button class="btn btn-red" id="fl-modal-ok"></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Contrôleurs broadcast : déclarés une fois, cités par leur nom dans les périmètres -->
+  <div class="set-panel" id="p-controllers">
+    <div class="set-card">
+      <h3>{{ _('settings.ctl_title') }}</h3>
+      <div class="muted" style="margin-bottom:10px">{{ _('settings.ctl_hint') }}</div>
+      <div id="ctl-list" class="muted">…</div>
+    </div>
+    <div class="set-card">
+      <h3 id="ctl-ed-title">{{ _('settings.ctl_new') }}</h3>
+      <div class="frow"><label for="ctl-name">{{ _('settings.ctl_name') }}</label><input type="text" id="ctl-name" maxlength="80" placeholder="VSM régie 1"></div>
+      <div class="frow"><label for="ctl-addr">{{ _('settings.ctl_addresses') }}</label><input type="text" id="ctl-addr" placeholder="10.1.30.2, 10.1.30.3" style="min-width:min(380px,100%)"></div>
+      <div class="frow"><label>{{ _('settings.ctl_protocols') }}</label>
+        <div class="ru-checks"><label><input type="checkbox" class="ctl-proto" value="emberplus"> Ember+</label>
+          <label><input type="checkbox" class="ctl-proto" value="swp08"> SW-P-08</label></div></div>
+      <div class="frow"><label for="ctl-note">{{ _('settings.rules_note') }}</label><input type="text" id="ctl-note" maxlength="300" style="min-width:min(380px,100%)"></div>
+      <div class="pl-actions">
+        <button class="btn btn-blue" id="ctl-save">{{ _('settings.save') }}</button>
+        <button class="btn" id="ctl-cancel" hidden>{{ _('settings.fleet_cancel') }}</button>
+        <span class="muted" id="ctl-msg"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Ember+ (service global) -->
+  <div class="set-panel" id="p-emberplus">
+    <div class="set-card">
+      <h3>{{ _('settings.emberplus') }}</h3>
+      <div class="muted" style="margin-bottom:12px">{{ _('settings.emberplus_hint') }}</div>
+      <div class="frow"><label for="ep-enabled">{{ _('settings.emberplus_enabled') }}</label><input type="checkbox" class="ios-toggle" id="ep-enabled"></div>
+      <div class="frow"><label for="ep-port">{{ _('settings.emberplus_port') }}</label><input type="number" id="ep-port" min="1" max="65535"></div>
+      <div class="frow"><label for="ep-push">{{ _('settings.emberplus_push_interval') }}</label><input type="number" id="ep-push" min="1" max="3600"></div>
+      <div class="muted" style="margin-bottom:12px">{{ _('settings.emberplus_push_interval_hint') }}</div>
+      <div class="frow"><label for="ep-slots">{{ _('settings.emberplus_slots_count') }}</label><input type="number" id="ep-slots" min="1" max="99"></div>
+      <div class="frow"><label for="ep-lanes">{{ _('settings.emberplus_lanes_per_slot') }}</label><input type="number" id="ep-lanes" min="1" max="50"></div>
+      <div class="frow"><label for="ep-ui-url">{{ _('settings.emberplus_ui_url') }}</label><input type="text" id="ep-ui-url" placeholder="http://192.168.1.10:5000"></div>
+      <div class="muted" style="margin-bottom:12px">{{ _('settings.emberplus_ui_url_hint') }}</div>
+      <div class="muted" style="margin-bottom:12px">{{ _('settings.emberplus_grid_size_hint') }}</div>
+
+      <h4 style="margin:18px 0 6px">{{ _('settings.emberplus_dedicated') }}</h4>
+      <div class="muted" style="margin-bottom:12px">{{ _('settings.emberplus_dedicated_hint') }}</div>
+      <div class="frow"><label for="ep-tally-port">{{ _('settings.emberplus_tally_port') }}</label><input type="number" id="ep-tally-port" min="0" max="65535" placeholder="0"></div>
+      <div class="frow"><label for="ep-tally-roots">{{ _('settings.emberplus_tally_roots') }}</label><input type="text" id="ep-tally-roots" placeholder="5"></div>
+      <div class="frow"><label for="ep-tally-excl">{{ _('settings.emberplus_tally_exclusive') }}</label><input type="checkbox" class="ios-toggle" id="ep-tally-excl"></div>
+      <div class="muted" style="margin-bottom:12px">{{ _('settings.emberplus_tally_exclusive_hint') }}</div>
+
+      <h4 style="margin:18px 0 6px">{{ _('settings.emberplus_delivery') }}</h4>
+      <div class="muted" style="margin-bottom:12px">{{ _('settings.emberplus_delivery_hint') }}</div>
+      <div class="frow"><label for="ep-eager">{{ _('settings.emberplus_eager_paths') }}</label><input type="text" id="ep-eager" placeholder="5.2"></div>
+      <div class="frow"><label for="ep-batch">{{ _('settings.emberplus_dir_batch') }}</label><input type="number" id="ep-batch" min="0" max="10000" placeholder="0"></div>
+
+      <button class="btn btn-blue" id="ep-save">{{ _('settings.save') }}</button>
+      <div class="muted" id="ep-status" style="margin-top:10px"></div>
+      <table class="set-tbl" id="ep-contrib" style="margin-top:10px"></table>
+      <div class="muted" style="margin-top:8px">{{ _('settings.emberplus_root_hint') }}</div>
+    </div>
+
+    <!-- Profil canonique (« moule IPG ») : la liste exposée commune aux outils -->
+    <div class="set-card">
+      <h3>{{ _('settings.emberplus_profile') }}</h3>
+      <div class="muted" style="margin-bottom:12px">{{ _('settings.emberplus_profile_hint') }}</div>
+      <div class="ep-prof-bar">
+        <input type="text" id="ep-prof-label" placeholder="{{ _('settings.emberplus_profile_name') }}" style="max-width:220px">
+        <span class="ep-spacer"></span>
+        <button class="btn" id="ep-prof-addblock" type="button">+ {{ _('settings.emberplus_block') }}</button>
+        <button class="btn" id="ep-prof-reload" type="button">{{ _('settings.emberplus_reload') }}</button>
+        <button class="btn" id="ep-prof-export" type="button">{{ _('settings.export') }}</button>
+        <button class="btn" id="ep-prof-import-btn" type="button">{{ _('settings.import') }}</button>
+        <input type="file" id="ep-prof-import" accept=".json,application/json" hidden>
+        <button class="btn btn-green" id="ep-prof-save" type="button">{{ _('settings.save') }}</button>
+      </div>
+      <div id="ep-prof"></div>
+    </div>
+  </div>
+
+  <!-- TSL (service global) : Bobi.Tools ÉMET les libellés que l'Ember+ ne dit pas -->
+  <div class="set-panel" id="p-tsl">
+    <div class="set-card">
+      <h3>{{ _('settings.tsl') }}</h3>
+      <div class="muted" style="margin-bottom:12px">{{ _('settings.tsl_hint') }}</div>
+      <div class="frow"><label for="tsl-enabled">{{ _('settings.tsl_enabled') }}</label><input type="checkbox" class="ios-toggle" id="tsl-enabled"></div>
+      <div class="frow"><label for="tsl-transport">{{ _('settings.tsl_transport') }}</label>
+        <select id="tsl-transport"><option value="udp">UDP</option><option value="tcp">TCP</option></select></div>
+      <div class="frow"><label for="tsl-host">{{ _('settings.tsl_host') }}</label><input type="text" id="tsl-host" autocomplete="off" placeholder="—"></div>
+      <div class="frow"><label for="tsl-port">{{ _('settings.tsl_port') }}</label><input type="number" id="tsl-port" min="0" max="65535" placeholder="—"></div>
+      <div class="muted" style="margin-bottom:12px">{{ _('settings.tsl_peer_hint') }}</div>
+      <div class="frow"><label for="tsl-interval">{{ _('settings.tsl_interval') }}</label><input type="number" id="tsl-interval" min="1" max="3600"></div>
+      <div class="frow"><label for="tsl-tally">{{ _('settings.tsl_tally') }}</label><input type="checkbox" class="ios-toggle" id="tsl-tally"></div>
+      <div class="frow"><label>{{ _('settings.tsl_levels') }}</label>
+        <span class="access-roles">
+          <label for="tsl-lv-slots"><input type="checkbox" id="tsl-lv-slots"> {{ _('settings.tsl_level_slots') }}</label>
+          <label for="tsl-lv-lanes"><input type="checkbox" id="tsl-lv-lanes"> {{ _('settings.tsl_level_lanes') }}</label>
+          <label for="tsl-lv-signals"><input type="checkbox" id="tsl-lv-signals"> {{ _('settings.tsl_level_signals') }}</label>
+        </span></div>
+      <div class="muted" style="margin-bottom:12px">{{ _('settings.tsl_levels_hint') }}</div>
+      <button class="btn btn-blue" id="tsl-save">{{ _('settings.save') }}</button>
+      <div class="muted" id="tsl-status" style="margin-top:10px"></div>
+    </div>
+
+    <!-- Plan d'index : le CONTRAT VSM, aussi durable que les racines Ember+ -->
+    <div class="set-card">
+      <h3>{{ _('settings.tsl_plan') }}</h3>
+      <div class="tsl-warn">{{ _('settings.tsl_plan_warn') }}</div>
+      <div class="muted" style="margin-bottom:12px">{{ _('settings.tsl_plan_hint') }}</div>
+      <div class="frow"><label for="tsl-sc-slots">{{ _('settings.tsl_screen_slots') }}</label><input type="number" id="tsl-sc-slots" min="0" max="65534"></div>
+      <div class="frow"><label for="tsl-sc-lanes">{{ _('settings.tsl_screen_lanes') }}</label><input type="number" id="tsl-sc-lanes" min="0" max="65534"></div>
+      <div class="frow"><label for="tsl-sc-inputs">{{ _('settings.tsl_screen_inputs') }}</label><input type="number" id="tsl-sc-inputs" min="0" max="65534"></div>
+      <div class="frow"><label for="tsl-sc-outputs">{{ _('settings.tsl_screen_outputs') }}</label><input type="number" id="tsl-sc-outputs" min="0" max="65534"></div>
+      <div class="frow"><label for="tsl-offset">{{ _('settings.tsl_index_offset') }}</label><input type="number" id="tsl-offset" min="-1000" max="1000"></div>
+      <div class="muted" style="margin-bottom:12px">{{ _('settings.tsl_index_offset_hint') }}</div>
+      <hr style="margin:16px 0">
+      <h3>{{ _('settings.tsl_labels_title') }}</h3>
+      <div class="muted" style="margin-bottom:12px">{{ _('settings.tsl_labels_hint') }}</div>
+      <div class="frow"><label for="tsl-label-len">{{ _('settings.tsl_label_len') }}</label><input type="number" id="tsl-label-len" min="4" max="64"></div>
+      <div class="frow"><label for="tsl-lane-fmt">{{ _('settings.tsl_lane_format') }}</label><input type="text" id="tsl-lane-fmt" autocomplete="off"></div>
+      <div class="frow"><label for="tsl-sig-fmt">{{ _('settings.tsl_signal_format') }}</label><input type="text" id="tsl-sig-fmt" autocomplete="off"></div>
+      <div class="frow"><label for="tsl-plugin-label">{{ _('settings.tsl_plugin_label') }}</label><input type="checkbox" class="ios-toggle" id="tsl-plugin-label"></div>
+      <div class="muted" style="margin-bottom:12px">{{ _('settings.tsl_plugin_label_hint') }}</div>
+      <div class="frow"><label for="tsl-brightness">{{ _('settings.tsl_brightness') }}</label><input type="number" id="tsl-brightness" min="0" max="3"></div>
+      <div class="frow"><label for="tsl-unicode">{{ _('settings.tsl_unicode') }}</label><input type="checkbox" class="ios-toggle" id="tsl-unicode"></div>
+      <div class="frow"><label for="tsl-pack">{{ _('settings.tsl_pack') }}</label><input type="checkbox" class="ios-toggle" id="tsl-pack"></div>
+      <div class="muted" style="margin-bottom:12px">{{ _('settings.tsl_overrides_hint') }}</div>
+      <textarea id="tsl-overrides" rows="4" style="width:100%;background:var(--bg-input);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:var(--radius-small);font:inherit" spellcheck="false"></textarea>
+      <div style="margin-top:12px"><button class="btn btn-blue" id="tsl-save2">{{ _('settings.save') }}</button></div>
+    </div>
+
+    <!-- Prévisualisation : construit les trames SANS ouvrir de socket -->
+    <div class="set-card">
+      <h3>{{ _('settings.tsl_preview') }}</h3>
+      <div class="muted" style="margin-bottom:12px">{{ _('settings.tsl_preview_hint') }}</div>
+      <div class="ep-prof-bar">
+        <button class="btn" id="tsl-prev-btn" type="button">{{ _('settings.tsl_preview_btn') }}</button>
+        <span class="ep-spacer"></span>
+        <button class="btn btn-green" id="tsl-send-btn" type="button">{{ _('settings.tsl_send_btn') }}</button>
+      </div>
+      <div class="muted" id="tsl-prev-status" style="margin-bottom:10px"></div>
+      <div id="tsl-prev-frame"></div>
+      <table class="set-tbl" id="tsl-prev-tbl" style="margin-top:12px"></table>
+    </div>
+  </div>
+
+  <!-- SW-P-08 (service global) : Bobi.Tools se présente au pupitre comme un ROUTEUR nommé.
+       On ÉCOUTE, le pupitre est client. Matrice = étage de routage, niveau = essence. -->
+  <div class="set-panel" id="p-swp08">
+    <div class="set-card">
+      <h3>{{ _('settings.swp08') }}</h3>
+      <div class="muted" style="margin-bottom:12px">{{ _('settings.swp08_hint') }}</div>
+      <div class="frow"><label for="sw-enabled">{{ _('settings.swp08_enabled') }}</label><input type="checkbox" class="ios-toggle" id="sw-enabled"></div>
+      <div class="frow"><label for="sw-port">{{ _('settings.swp08_port') }}</label><input type="number" id="sw-port" min="0" max="65535" placeholder="—"></div>
+      <div class="muted" style="margin-bottom:12px">{{ _('settings.swp08_port_hint') }}</div>
+      <div class="frow"><label for="sw-label-chars">{{ _('settings.swp08_label_chars') }}</label>
+        <select id="sw-label-chars"><option value="4">4</option><option value="8">8</option><option value="12">12</option></select></div>
+      <div class="muted" style="margin-bottom:12px">{{ _('settings.swp08_label_chars_hint') }}</div>
+      <div class="frow"><label for="sw-extended">{{ _('settings.swp08_extended') }}</label><input type="checkbox" class="ios-toggle" id="sw-extended"></div>
+      <div class="muted" style="margin-bottom:12px">{{ _('settings.swp08_extended_hint') }}</div>
+      <div class="frow"><label for="sw-matrix-in">{{ _('settings.swp08_matrix_in') }}</label><input type="number" id="sw-matrix-in" min="1" max="256"></div>
+      <div class="frow"><label for="sw-matrix-out">{{ _('settings.swp08_matrix_out') }}</label><input type="number" id="sw-matrix-out" min="1" max="256"></div>
+      <div class="muted" style="margin-bottom:12px">{{ _('settings.swp08_matrix_hint') }}</div>
+      <button class="btn btn-blue swp08-save" type="button">{{ _('settings.save') }}</button>
+      <div class="muted" id="sw-status" style="margin-top:10px"></div>
+    </div>
+
+    <!-- État servi : ce que chaque layer porte réellement de libellés -->
+    <div class="set-card">
+      <h3>{{ _('settings.swp08_levels') }}</h3>
+      <div class="muted" style="margin-bottom:12px">{{ _('settings.swp08_levels_hint') }}</div>
+      <table class="set-tbl" id="sw-levels-tbl"></table>
+    </div>
+
+    <!-- Ce que le pupitre a le droit d'écrire chez nous -->
+    <div class="set-card">
+      <h3>{{ _('settings.swp08_write') }}</h3>
+      <div class="tsl-warn">{{ _('settings.swp08_assign_warn') }}</div>
+      <div class="frow"><label for="sw-allow-assign">{{ _('settings.swp08_allow_assign') }}</label><input type="checkbox" class="ios-toggle" id="sw-allow-assign"></div>
+      <div class="muted" style="margin-bottom:12px">{{ _('settings.swp08_allow_assign_hint') }}</div>
+      <div class="frow"><label for="sw-push-names">{{ _('settings.swp08_push_names') }}</label><input type="checkbox" class="ios-toggle" id="sw-push-names"></div>
+      <div class="muted" style="margin-bottom:12px">{{ _('settings.swp08_push_names_hint') }}</div>
+      <div class="frow"><label for="sw-dual-status">{{ _('settings.swp08_dual_status') }}</label><input type="number" id="sw-dual-status" min="0" max="255"></div>
+      <div class="muted" style="margin-bottom:12px">{{ _('settings.swp08_dual_status_hint') }}</div>
+      <button class="btn btn-blue swp08-save" type="button">{{ _('settings.save') }}</button>
+    </div>
+
+    <!-- Banc d'essai : 8 sources, 8 destinations, chaque octet connu -->
+    <div class="set-card">
+      <h3>{{ _('settings.swp08_test') }}</h3>
+      <div class="muted" style="margin-bottom:12px">{{ _('settings.swp08_test_hint') }}</div>
+      <div class="frow"><label for="sw-test">{{ _('settings.swp08_test_enabled') }}</label><input type="checkbox" class="ios-toggle" id="sw-test"></div>
+      <div class="frow"><label for="sw-test-matrix">{{ _('settings.swp08_test_matrix') }}</label><input type="number" id="sw-test-matrix" min="1" max="16"></div>
+      <div class="muted" style="margin-bottom:12px">{{ _('settings.swp08_test_matrix_hint') }}</div>
+      <button class="btn btn-blue swp08-save" type="button">{{ _('settings.save') }}</button>
+    </div>
+
+    <!-- Bornes de grille + gabarits : ce qui décide COMBIEN de libellés et COMMENT ils se lisent -->
+    <div class="set-card">
+      <h3>{{ _('settings.swp08_grid') }}</h3>
+      <div class="tsl-warn">{{ _('settings.swp08_grid_warn') }}</div>
+      <div class="muted" style="margin-bottom:12px">{{ _('settings.swp08_grid_hint') }}</div>
+      <div class="frow"><label for="sw-sdi">{{ _('settings.swp08_sdi_per_slot') }}</label><input type="number" id="sw-sdi" min="1" max="50"></div>
+      <div class="frow"><label for="sw-ip">{{ _('settings.swp08_ip_per_slot') }}</label><input type="number" id="sw-ip" min="1" max="49"></div>
+      <hr style="margin:16px 0">
+      <h3>{{ _('settings.swp08_labels_title') }}</h3>
+      <div class="muted" style="margin-bottom:12px">{{ _('settings.swp08_labels_hint') }}</div>
+      <div class="frow"><label for="sw-sig-fmt">{{ _('settings.swp08_signal_format') }}</label><input type="text" id="sw-sig-fmt" autocomplete="off"></div>
+      <div class="frow"><label for="sw-lane-fmt">{{ _('settings.swp08_lane_format') }}</label><input type="text" id="sw-lane-fmt" autocomplete="off"></div>
+      <div class="frow"><label for="sw-slot-fmt">{{ _('settings.swp08_slot_format') }}</label><input type="text" id="sw-slot-fmt" autocomplete="off"></div>
+      <div class="frow"><label for="sw-unused">{{ _('settings.swp08_unused_label') }}</label><input type="text" id="sw-unused" autocomplete="off"></div>
+      <div class="muted" style="margin-bottom:12px">{{ _('settings.swp08_unused_hint') }}</div>
+      <button class="btn btn-blue swp08-save" type="button">{{ _('settings.save') }}</button>
+    </div>
+
+    <!-- Prévisualisation : construit les trames SANS ouvrir de socket -->
+    <div class="set-card">
+      <h3>{{ _('settings.swp08_preview') }}</h3>
+      <div class="muted" style="margin-bottom:12px">{{ _('settings.swp08_preview_hint') }}</div>
+      <div class="ep-prof-bar">
+        <label for="sw-prev-kind" class="muted">{{ _('settings.swp08_prev_kind') }}</label>
+        <select id="sw-prev-kind">
+          <option value="source">{{ _('settings.swp08_kind_source') }}</option>
+          <option value="dest">{{ _('settings.swp08_kind_dest') }}</option>
+        </select>
+        <label for="sw-prev-level" class="muted">{{ _('settings.swp08_prev_level') }}</label>
+        <select id="sw-prev-level"></select>
+        <button class="btn" id="sw-prev-btn" type="button">{{ _('settings.swp08_preview_btn') }}</button>
+        <span class="ep-spacer"></span>
+        <button class="btn" id="sw-recv-btn" type="button">{{ _('settings.swp08_received_btn') }}</button>
+      </div>
+      <div class="muted" id="sw-prev-status" style="margin-bottom:10px"></div>
+      <div id="sw-prev-frame"></div>
+      <table class="set-tbl" id="sw-prev-tbl" style="margin-top:12px"></table>
+      <div id="sw-recv-wrap" style="margin-top:16px"></div>
+    </div>
+  </div>
+
+  <!-- Mail (service global) -->
+  <div class="set-panel" id="p-mail">
+    <div class="set-card">
+      <h3>{{ _('settings.mail') }}</h3>
+      <div class="muted" style="margin-bottom:12px">{{ _('settings.mail_hint') }}</div>
+      <div class="frow"><label for="mail-enabled">{{ _('settings.mail_enabled') }}</label><input type="checkbox" class="ios-toggle" id="mail-enabled"></div>
+      <div class="frow"><label for="mail-host">{{ _('settings.mail_host') }}</label><input type="text" id="mail-host" autocomplete="off"></div>
+      <div class="frow"><label for="mail-port">{{ _('settings.mail_port') }}</label><input type="number" id="mail-port" min="1" max="65535"></div>
+      <div class="frow"><label for="mail-security">{{ _('settings.mail_security') }}</label>
+        <select id="mail-security">
+          <option value="starttls">STARTTLS</option>
+          <option value="ssl">SSL/TLS</option>
+          <option value="none">{{ _('settings.mail_security_none') }}</option>
+        </select>
+      </div>
+      <div class="frow"><label for="mail-username">{{ _('settings.mail_username') }}</label><input type="text" id="mail-username" autocomplete="off"></div>
+      <div class="frow"><label for="mail-password">{{ _('settings.mail_password') }}</label><input type="password" id="mail-password" autocomplete="new-password"></div>
+      <div class="frow"><label for="mail-from">{{ _('settings.mail_from') }}</label><input type="text" id="mail-from" autocomplete="off"></div>
+      <div class="frow"><label for="mail-default-to">{{ _('settings.mail_default_to') }}</label><input type="text" id="mail-default-to" autocomplete="off"></div>
+      <div class="frow"><label for="mail-token">{{ _('settings.mail_token') }}</label><input type="password" id="mail-token" autocomplete="new-password"></div>
+      <button class="btn btn-blue" id="mail-save">{{ _('settings.save') }}</button>
+      <div class="muted" id="mail-status" style="margin-top:10px"></div>
+      <hr style="margin:16px 0">
+      <h3>{{ _('settings.mail_test') }}</h3>
+      <div class="frow"><label for="mail-test-to">{{ _('settings.mail_test_to') }}</label><input type="text" id="mail-test-to" autocomplete="off"></div>
+      <button class="btn" id="mail-test-btn">{{ _('settings.mail_test_btn') }}</button>
+      <div class="muted" id="mail-test-status" style="margin-top:10px"></div>
+    </div>
+  </div>
+
+  <!-- Notifications push (service global ntfy) -->
+  <div class="set-panel" id="p-ntfy">
+    <div class="set-card">
+      <h3>{{ _('settings.ntfy') }}</h3>
+      <div class="muted" style="margin-bottom:12px">{{ _('settings.ntfy_hint') }}</div>
+      <div class="frow"><label for="ntfy-enabled">{{ _('settings.ntfy_enabled') }}</label><input type="checkbox" class="ios-toggle" id="ntfy-enabled"></div>
+      <div class="frow"><label for="ntfy-image">{{ _('settings.ntfy_image') }}</label><input type="text" id="ntfy-image" autocomplete="off"></div>
+      <div class="frow"><label for="ntfy-port">{{ _('settings.ntfy_port') }}</label><input type="number" id="ntfy-port" min="1" max="65535"></div>
+      <div class="frow"><label for="ntfy-bind">{{ _('settings.ntfy_bind') }}</label><input type="text" id="ntfy-bind" autocomplete="off" placeholder="0.0.0.0"></div>
+      <div class="frow"><label for="ntfy-base-url">{{ _('settings.ntfy_base_url') }}</label><input type="text" id="ntfy-base-url" autocomplete="off" placeholder="http://10.10.10.221:2586"></div>
+      <div class="frow"><label for="ntfy-default-topic">{{ _('settings.ntfy_default_topic') }}</label><input type="text" id="ntfy-default-topic" autocomplete="off"></div>
+      <div class="frow"><label for="ntfy-default-access">{{ _('settings.ntfy_default_access') }}</label>
+        <select id="ntfy-default-access">
+          <option value="deny-all">{{ _('settings.ntfy_access_deny') }}</option>
+          <option value="read-only">{{ _('settings.ntfy_access_readonly') }}</option>
+        </select>
+      </div>
+      <div class="frow"><label for="ntfy-admin-user">{{ _('settings.ntfy_admin_user') }}</label><input type="text" id="ntfy-admin-user" autocomplete="off"></div>
+      <div class="frow"><label for="ntfy-admin-pass">{{ _('settings.ntfy_admin_pass') }}</label><input type="password" id="ntfy-admin-pass" autocomplete="new-password"></div>
+      <div class="frow"><label for="ntfy-token">{{ _('settings.ntfy_token') }}</label><input type="password" id="ntfy-token" autocomplete="new-password"></div>
+      <button class="btn btn-blue" id="ntfy-save">{{ _('settings.save') }}</button>
+      <button class="btn" id="ntfy-token-btn">{{ _('settings.ntfy_new_token') }}</button>
+      <div class="muted" id="ntfy-status" style="margin-top:10px"></div>
+      <hr style="margin:16px 0">
+      <h3>{{ _('settings.ntfy_test') }}</h3>
+      <div class="frow"><label for="ntfy-test-topic">{{ _('settings.ntfy_test_topic') }}</label><input type="text" id="ntfy-test-topic" autocomplete="off"></div>
+      <div class="frow"><label for="ntfy-test-msg">{{ _('settings.ntfy_test_msg') }}</label><input type="text" id="ntfy-test-msg" autocomplete="off"></div>
+      <button class="btn" id="ntfy-test-btn">{{ _('settings.ntfy_test_btn') }}</button>
+      <div class="muted" id="ntfy-test-status" style="margin-top:10px"></div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/scripts.js?v={{ asset_v('scripts.js') }}"></script>
+<script>
+const ROLES = {{ roles | tojson }};
+const THEME_ONLY = {{ theme_only | tojson }};   // opérateur : page réduite au choix du style
+let SETTINGS = {}, USERS = [];
+
+// ── Onglets : familles (niveau 0) + onglets de la famille (niveau 1) ─────────
+// Chaque famille liste ses onglets ; on les filtre à ceux PRÉSENTS dans la page
+// (« Réglages des outils » n'existe que si un outil déclare un config_schema).
+// La délivrance du courrier (Mail) est rangée dans Système, comme dans Studio :
+// c'est de l'installation, pas un protocole d'exploitation.
+const SET_GROUPS = [
+  {id: 'general',    tabs: ['appearance', 'users', 'roles']},
+  {id: 'outils',     tabs: ['plugins', 'rules', 'toolcfg', 'services']},
+  {id: 'protocoles', tabs: ['controllers', 'emberplus', 'tsl', 'swp08']},
+  {id: 'systeme',    tabs: ['network', 'backup', 'deploy', 'mail', 'audit', 'i18n']},
+];
+const tabBtn = (t) => document.querySelector('#set-tabs .tab[data-t="'+t+'"]');
+SET_GROUPS.forEach(g => { g.tabs = g.tabs.filter(tabBtn); });
+const groupOf = (t) => SET_GROUPS.find(g => g.tabs.includes(t)) || SET_GROUPS[0];
+let currentTab = 'appearance';
+
+function switchSetTab(t){
+  if(!tabBtn(t)) t = 'appearance';
+  currentTab = t;
+  const grp = groupOf(t);
+  document.querySelectorAll('#set-groups .tab').forEach(x => {
+    const on = x.dataset.g === grp.id;
+    x.classList.toggle('active', on); x.setAttribute('aria-selected', on);
+  });
+  document.querySelectorAll('#set-tabs .tab').forEach(x => {
+    x.style.display = grp.tabs.includes(x.dataset.t) ? '' : 'none';
+    const on = x.dataset.t === t;
+    x.classList.toggle('active', on); x.setAttribute('aria-selected', on);
+  });
+  // Sous-nav masquée quand la famille n'a qu'un onglet (redondante).
+  document.getElementById('set-tabs').hidden = grp.tabs.length <= 1;
+  document.querySelectorAll('.set-panel').forEach(p => p.classList.toggle('active', p.id === 'p-'+t));
+  if(history.replaceState && (location.hash||'').split('/')[0] !== '#'+t) history.replaceState(null, '', '#'+t);
+  LOADERS[t] && LOADERS[t]();
+}
+document.querySelectorAll('#set-tabs .tab').forEach(b => {
+  b.setAttribute('role', 'tab');
+  b.onclick = () => switchSetTab(b.dataset.t);
+});
+document.querySelectorAll('#set-groups .tab').forEach(b => {
+  b.setAttribute('role', 'tab');
+  const grp = SET_GROUPS.find(g => g.id === b.dataset.g);
+  if(!grp || !grp.tabs.length){ b.style.display = 'none'; return; }
+  // Ouvrir une famille : on y reste si l'onglet courant en fait partie, sinon son premier.
+  b.onclick = () => switchSetTab(grp.tabs.includes(currentTab) ? currentTab : grp.tabs[0]);
+});
+// Clavier façon ARIA Tabs (← → Début Fin), restreint aux onglets de la famille active.
+// (absente en mode « thème seul » : l'opérateur n'a pas de barre d'onglets)
+const setTabsEl = document.getElementById('set-tabs');
+if(setTabsEl) setTabsEl.addEventListener('keydown', e => {
+  const keys = {ArrowLeft: -1, ArrowRight: 1, Home: 'first', End: 'last'};
+  if(!(e.key in keys)) return;
+  e.preventDefault();
+  const tabs = groupOf(currentTab).tabs, cur = tabs.indexOf(currentTab);
+  const i = keys[e.key] === 'first' ? 0 : keys[e.key] === 'last' ? tabs.length - 1
+          : (cur + keys[e.key] + tabs.length) % tabs.length;
+  switchSetTab(tabs[i]); tabBtn(tabs[i]).focus();
+});
+
+// ── Apparence ────────────────────────────────────────────────────────────────
+async function loadAppearance(){
+  // Opérateur (thème seul) : le thème courant est déjà pré-sélectionné côté serveur et
+  // les endpoints /api/settings · /api/i18n/langs lui sont interdits → on ne charge rien.
+  if(THEME_ONLY) return;
+  SETTINGS = await BT.fetchJSON('/api/settings');
+  document.getElementById('s-theme').value = SETTINGS.theme || 'classic';
+  document.getElementById('b-system').value = SETTINGS.brand_system_name || '';
+  document.getElementById('b-org').value = SETTINGS.brand_org_name || '';
+  document.getElementById('b-location').value = SETTINGS.brand_location || '';
+  document.getElementById('b-logo-cur').textContent = SETTINGS.brand_logo_url || '';
+  const langs = await BT.fetchJSON('/api/i18n/langs');
+  const sel = document.getElementById('s-lang');
+  sel.innerHTML = langs.map(l => '<option value="'+l.code+'">'+BT.esc(l.label)+'</option>').join('');
+  sel.value = SETTINGS.ui_lang_default || 'fr';
+}
+document.getElementById('save-appearance').onclick = async () => {
+  if(THEME_ONLY){   // opérateur : endpoint étroit, ne touche QUE le thème
+    await BT.fetchJSON('/api/settings/theme', { body: { theme: document.getElementById('s-theme').value }});
+    BT.toast(window.t('js.saved'), 'info'); setTimeout(() => location.reload(), 600);
+    return;
+  }
+  await BT.fetchJSON('/api/settings', { body: {
+    theme: document.getElementById('s-theme').value,
+    ui_lang_default: document.getElementById('s-lang').value,
+    brand_system_name: document.getElementById('b-system').value,
+    brand_org_name: document.getElementById('b-org').value,
+    brand_location: document.getElementById('b-location').value,
+  }});
+  const f = document.getElementById('b-logo').files[0];
+  if(f){ const fd = new FormData(); fd.append('logo', f); await fetch('/api/brand/logo', {method:'POST', body: fd}); }
+  BT.toast(window.t('js.saved'), 'info'); setTimeout(() => location.reload(), 600);
+};
+
+{# Tout ce qui suit pilote des onglets ABSENTS de la page réduite « thème seul »
+   (opérateur) : servi tel quel, son premier gestionnaire posé sur un élément manquant
+   levait une erreur et arrêtait le script. On ne le sert donc qu'à la page complète. #}
+{% if not theme_only %}
+// ── Utilisateurs ─────────────────────────────────────────────────────────────
+async function loadUsers(){
+  USERS = await BT.fetchJSON('/api/users');
+  const tb = document.querySelector('#users-tbl tbody');
+  tb.innerHTML = USERS.map(u => {
+    const opts = Object.entries(ROLES).map(([rid,rl]) =>
+      '<option value="'+rid+'"'+(u.role===rid?' selected':'')+'>'+BT.esc(rl)+'</option>').join('');
+    return '<tr><td>'+BT.esc(u.username)+'</td>'
+      +'<td><select data-uid="'+u.id+'" class="u-role">'+opts+'</select></td>'
+      +'<td><button class="btn btn-red u-del" data-uid="'+u.id+'">'+BT.esc(window.t('settings.delete'))+'</button></td></tr>';
+  }).join('');
+  tb.querySelectorAll('.u-role').forEach(s => s.onchange = () =>
+    BT.fetchJSON('/api/users/'+s.dataset.uid, {method:'PATCH', body:{role:s.value}})
+      .then(()=>BT.toast(window.t('js.saved')))
+      .catch(e => { BT.toast(e.message,'error'); loadUsers(); }));   // refus (dernier admin…) : l'écran revient à la vérité
+  tb.querySelectorAll('.u-del').forEach(b => b.onclick = async () => {
+    if(!confirm(window.t('js.confirm'))) return;
+    try { await BT.fetchJSON('/api/users/'+b.dataset.uid, {method:'DELETE'}); loadUsers(); }
+    catch(e){ BT.toast(e.message,'error'); }
+  });
+  loadGroups();   // les deux cartes vivent dans le même onglet
+}
+// ── Groupes d'utilisateurs ───────────────────────────────────────────────────
+// Un groupe ne donne aucun droit par lui-même : il sert de destinataire commun aux
+// politiques de partage (accès aux outils, coffres d'identifiants…).
+let GROUPS = [];
+async function loadGroups(){
+  GROUPS = await BT.fetchJSON('/api/groups');
+  if(!USERS.length) USERS = await BT.fetchJSON('/api/users');
+  const tb = document.querySelector('#groups-tbl tbody');
+  if(!GROUPS.length){
+    tb.innerHTML = '<tr><td colspan="3" class="muted">'+BT.esc(window.t('settings.group_none'))+'</td></tr>';
+    return;
+  }
+  tb.innerHTML = GROUPS.map(g => {
+    const boxes = USERS.map(u =>
+      '<label><input type="checkbox" class="gm" data-gid="'+g.id+'" data-uid="'+u.id+'"'
+      +((g.members||[]).includes(u.id)?' checked':'')+'>'+BT.esc(u.username)+'</label>').join('');
+    const names = (g.members||[]).map(id => (USERS.find(u => u.id===id)||{}).username).filter(Boolean);
+    return '<tr><td><strong>'+BT.esc(g.name)+'</strong>'
+      +(g.description?'<br><span class="muted">'+BT.esc(g.description)+'</span>':'')+'</td>'
+      +'<td><details><summary>'+(names.length ? BT.esc(names.join(', ')) : BT.esc(window.t('settings.group_empty')))+'</summary>'
+      +'<div class="access-roles" style="margin-top:6px">'+boxes+'</div></details></td>'
+      +'<td><button class="btn btn-red g-del" data-gid="'+g.id+'">'+BT.esc(window.t('settings.delete'))+'</button></td></tr>';
+  }).join('');
+  // Chaque case renvoie la liste COMPLÈTE des membres du groupe (l'API remplace).
+  tb.querySelectorAll('.gm').forEach(c => c.onchange = async () => {
+    const gid = c.dataset.gid;
+    const members = [...tb.querySelectorAll('.gm[data-gid="'+gid+'"]:checked')].map(x => +x.dataset.uid);
+    try { await BT.fetchJSON('/api/groups/'+gid, {method:'PATCH', body:{members}}); BT.toast(window.t('js.saved')); loadGroups(); }
+    catch(e){ BT.toast(e.message,'error'); }
+  });
+  tb.querySelectorAll('.g-del').forEach(b => b.onclick = async () => {
+    if(!confirm(window.t('js.confirm'))) return;
+    try { await BT.fetchJSON('/api/groups/'+b.dataset.gid, {method:'DELETE'}); loadGroups(); }
+    catch(e){ BT.toast(e.message,'error'); }
+  });
+}
+document.getElementById('add-group').onclick = async () => {
+  const name = document.getElementById('ng-name').value.trim();
+  if(!name){ BT.toast(window.t('settings.group_name'),'warning'); return; }
+  try {
+    await BT.fetchJSON('/api/groups', {body:{name, description: document.getElementById('ng-desc').value}});
+    document.getElementById('ng-name').value = ''; document.getElementById('ng-desc').value = '';
+    loadGroups();
+  } catch(e){ BT.toast(e.message,'error'); }
+};
+
+document.getElementById('add-user').onclick = async () => {
+  try {
+    await BT.fetchJSON('/api/users', { body: {
+      username: document.getElementById('nu-username').value,
+      password: document.getElementById('nu-password').value,
+      role: document.getElementById('nu-role').value }});
+    document.getElementById('nu-username').value = ''; document.getElementById('nu-password').value = '';
+    loadUsers();
+  } catch(e){ BT.toast(e.message,'error'); }
+};
+
+// ── Rôles : matrice rôles × permissions ──────────────────────────────────────
+// Chaque bascule est un PATCH immédiat ; l'écran reprend l'état RENVOYÉ par le serveur
+// (et revient en arrière sur erreur), plutôt que de croire la case cochée.
+let ROLES_DATA = null;
+function rolesAdopt(d){
+  ROLES_DATA = d;
+  // Le sélecteur de rôle des utilisateurs suit (création / renommage / suppression).
+  Object.keys(ROLES).forEach(k => delete ROLES[k]);
+  d.roles.forEach(r => { ROLES[r.id] = r.label; });
+  const nu = document.getElementById('nu-role');
+  if(nu) nu.innerHTML = d.roles.map(r => '<option value="'+BT.esc(r.id)+'">'+BT.esc(r.label)+'</option>').join('');
+  renderRoles();
+}
+async function loadRoles(){
+  try { rolesAdopt(await BT.fetchJSON('/api/roles')); }
+  catch(e){ document.getElementById('rl-tbl').textContent = e.message; }
+}
+function renderRoles(){
+  const d = ROLES_DATA, T = window.t, E = BT.esc;
+  document.getElementById('rl-mine').hidden = !(d.me && d.me !== 'admin');
+  const head = '<thead><tr><th>'+E(T('settings.roles_perm'))+'</th>' + d.roles.map(r =>
+    '<th>'+E(r.id)+'<small>'+E(r.label)+'</small>'+(r.locked ? '<small>🔒 '+E(T('settings.roles_locked'))+'</small>' : '')+'</th>').join('') + '</tr></thead>';
+  const row = (pid, label, desc) => '<tr><td class="rl-perm">'+E(label)+(desc ? '<small>'+E(desc)+'</small>' : '')
+    + '<small class="mono">'+E(pid)+'</small></td>' + d.roles.map(r =>
+      '<td><input type="checkbox" class="ios-toggle rl-cb" data-role="'+E(r.id)+'" data-perm="'+E(pid)+'"'
+      + (r.permissions.includes(pid) ? ' checked' : '') + (r.locked ? ' disabled' : '')
+      + ' aria-label="'+E(r.id+' — '+label)+'"></td>').join('') + '</tr>';
+  const cols = d.roles.length + 1;
+  let body = '<tbody><tr class="rl-group"><td colspan="'+cols+'">'+E(T('settings.roles_core'))+'</td></tr>'
+    + d.catalogue.core.map(p => row(p, T('js.perm.'+p) !== 'js.perm.'+p ? T('js.perm.'+p) : p, '')).join('');
+  const byTool = {};
+  d.catalogue.tools.forEach(p => { (byTool[p.tool_label] = byTool[p.tool_label] || []).push(p); });
+  Object.keys(byTool).sort().forEach(tl => {
+    body += '<tr class="rl-group"><td colspan="'+cols+'">'+E(tl)+'</td></tr>'
+      + byTool[tl].map(p => row(p.id, p.label, p.description)).join('');
+  });
+  body += '</tbody>';
+  const foot = '<tfoot><tr><td>'+E(T('settings.roles_accounts'))+'</td>' + d.roles.map(r =>
+    '<td>'+r.users+'<div class="pl-actions" style="justify-content:center;margin-top:6px">'
+    + (r.locked ? '' : '<button class="btn btn-sm rl-rename" data-role="'+E(r.id)+'">'+E(T('settings.roles_rename'))+'</button>')
+    + (r.locked ? '' : r.builtin
+        ? '<button class="btn btn-sm rl-reset" data-role="'+E(r.id)+'">'+E(T('settings.roles_reset'))+'</button>'
+        : '<button class="btn btn-sm btn-red rl-del" data-role="'+E(r.id)+'"'+(r.users ? ' disabled title="'+E(T('settings.roles_in_use'))+'"' : '')+'>'+E(T('settings.delete'))+'</button>')
+    + '</div></td>').join('') + '</tr></tfoot>';
+  const tbl = document.getElementById('rl-tbl');
+  tbl.innerHTML = head + body + foot;
+  tbl.querySelectorAll('.rl-cb').forEach(cb => cb.onchange = async () => {
+    cb.disabled = true;
+    try { rolesAdopt(await BT.fetchJSON('/api/roles/'+encodeURIComponent(cb.dataset.role),
+                       {method:'PATCH', body:{perm: cb.dataset.perm, on: cb.checked}})); }
+    catch(e){ cb.checked = !cb.checked; cb.disabled = false; BT.toast(e.message,'error'); }
+  });
+  tbl.querySelectorAll('.rl-rename').forEach(b => b.onclick = async () => {
+    const r = ROLES_DATA.roles.find(x => x.id === b.dataset.role);
+    const label = prompt(T('settings.roles_rename_prompt'), r.label);
+    if(label === null) return;
+    try { rolesAdopt(await BT.fetchJSON('/api/roles/'+encodeURIComponent(r.id), {method:'PATCH', body:{label}})); }
+    catch(e){ BT.toast(e.message,'error'); }
+  });
+  tbl.querySelectorAll('.rl-reset').forEach(b => b.onclick = async () => {
+    if(!confirm(T('settings.roles_reset_confirm'))) return;
+    try { rolesAdopt(await BT.fetchJSON('/api/roles/'+encodeURIComponent(b.dataset.role), {method:'PATCH', body:{reset:true}})); }
+    catch(e){ BT.toast(e.message,'error'); }
+  });
+  tbl.querySelectorAll('.rl-del').forEach(b => b.onclick = async () => {
+    if(!confirm(T('js.confirm'))) return;
+    try { rolesAdopt(await BT.fetchJSON('/api/roles/'+encodeURIComponent(b.dataset.role), {method:'DELETE'})); }
+    catch(e){ BT.toast(e.message,'error'); }
+  });
+}
+document.getElementById('rl-add').onclick = async () => {
+  const id = document.getElementById('rl-new-id').value.trim(), label = document.getElementById('rl-new-label').value.trim();
+  try {
+    rolesAdopt(await BT.fetchJSON('/api/roles', {body:{id, label}}));
+    document.getElementById('rl-new-id').value = ''; document.getElementById('rl-new-label').value = '';
+  } catch(e){ BT.toast(e.message,'error'); }
+};
+
+// ── Périmètres : règles par outil ────────────────────────────────────────────
+let RULES = null, RU_EDIT = null;
+const ruChoicesCache = {};
+async function loadRules(){
+  try {
+    RULES = await BT.fetchJSON('/api/access-rules');
+    if(!USERS.length) USERS = await BT.fetchJSON('/api/users');
+    if(!GROUPS.length) GROUPS = await BT.fetchJSON('/api/groups');
+  } catch(e){ document.getElementById('ru-list').textContent = e.message; return; }
+  renderRules();
+}
+function ruToolOf(t){ return (RULES.tools || []).find(x => x.type === t); }
+function ruScopeText(tool, scope){
+  const E = BT.esc, T = window.t;
+  const parts = (tool ? tool.resources : []).map(res => {
+    const sel = (scope || {})[res.key];
+    if(!sel) return E(res.label)+' : '+E(T('settings.rules_any'));
+    const bits = [];
+    if(sel.values) bits.push(sel.values.map(v => E(ruChoiceName(tool.type, res.key, v))).join(', '));
+    (res.attrs || []).forEach(a => { if(sel[a.key]) bits.push(E(a.label)+' '+E(Array.isArray(sel[a.key]) ? sel[a.key].join(', ') : sel[a.key])); });
+    return E(res.label)+' : '+bits.join(' '+E(T('settings.rules_or'))+' ');
+  });
+  return parts.join(' · ');
+}
+function ruChoiceName(type, key, id){
+  const c = (ruChoicesCache[type+'/'+key] || []).find(x => x.id === id);
+  return c ? c.name : id;
+}
+async function ruLoadChoices(type, res){
+  const k = type+'/'+res.key;
+  if(!res.choices || ruChoicesCache[k]) return ruChoicesCache[k] || [];
+  try { ruChoicesCache[k] = (await BT.fetchJSON('/api/access-rules/choices/'+encodeURIComponent(type)+'/'+encodeURIComponent(res.key))).choices; }
+  catch(e){ ruChoicesCache[k] = []; }
+  return ruChoicesCache[k];
+}
+function renderRules(){
+  const E = BT.esc, T = window.t, box = document.getElementById('ru-list');
+  if(!RULES.tools.length){ box.textContent = T('settings.rules_no_tool'); document.getElementById('ru-new').hidden = true; return; }
+  document.getElementById('ru-new').hidden = false;
+  // Les NOMS des ressources (switchs…) viennent de l'outil : on n'attend pas sa réponse pour
+  // afficher la liste — un outil arrêté la bloquerait. On réaffiche une fois les noms reçus.
+  // Seulement pour les outils qui ONT des règles : certaines listes coûtent cher à l'outil
+  // (le C100 relit toutes ses cartes) et n'ont rien à nommer tant qu'aucune règle n'existe.
+  const avecRegles = new Set(RULES.rules.map(r => r.tool));
+  const manquants = [];
+  for(const t of RULES.tools) if(avecRegles.has(t.type)) for(const r of t.resources)
+    if(r.choices && !ruChoicesCache[t.type+'/'+r.key]) manquants.push(ruLoadChoices(t.type, r));
+  if(manquants.length) Promise.all(manquants).then(() => renderRules());
+  if(!RULES.rules.length){ box.textContent = T('settings.rules_none'); return; }
+  const uname = (id) => (USERS.find(u => u.id === id) || {}).username || ('#'+id);
+  const gname = (id) => (GROUPS.find(g => g.id === id) || {}).name || ('#'+id);
+  box.innerHTML = RULES.rules.map(r => {
+    const tool = ruToolOf(r.tool), p = r.principals || {};
+    const perms = r.perms.map(pid => ((tool && tool.permissions.find(x => x.id === pid)) || {}).label || pid);
+    const who = [].concat((p.roles||[]).map(x => T('settings.role')+' '+(RULES.roles[x] || x)),
+                          (p.groups||[]).map(x => T('settings.group')+' '+gname(x)),
+                          (p.users||[]).map(uname), (p.controllers||[]).map(x => T('settings.rules_controller')+' '+(((RULES.controllers||[]).find(c => c.id === x) || {}).name || x)));
+    return '<div class="ru-rule"><div class="ru-body">'
+      + '<div><b>'+E(tool ? tool.label : r.tool)+'</b> — '+E(perms.join(', '))
+      + '<span class="ru-badge '+E(r.mode || 'allow')+'">'
+      + E(T('settings.rules_mode_' + (r.mode || 'allow')))+'</span></div>'
+      + '<div>'+E(T('settings.rules_who'))+' : '+E(who.join(', '))+'</div>'
+      + '<div class="muted">'+ruScopeText(tool, r.scope)+'</div>'
+      + (r.note ? '<div class="muted"><i>'+E(r.note)+'</i></div>' : '')
+      + '</div><div class="pl-actions"><button class="btn btn-sm ru-edit" data-id="'+r.id+'">'+E(T('settings.rules_edit'))+'</button>'
+      + '<button class="btn btn-sm btn-red ru-del" data-id="'+r.id+'">'+E(T('settings.delete'))+'</button></div></div>';
+  }).join('');
+  box.querySelectorAll('.ru-edit').forEach(b => b.onclick = () => ruOpen(RULES.rules.find(r => r.id === +b.dataset.id)));
+  box.querySelectorAll('.ru-del').forEach(b => b.onclick = async () => {
+    if(!confirm(T('js.confirm'))) return;
+    try { await BT.fetchJSON('/api/access-rules/'+b.dataset.id, {method:'DELETE'}); loadRules(); }
+    catch(e){ BT.toast(e.message,'error'); }
+  });
+}
+function ruChecks(id, items, chosen){
+  document.getElementById(id).innerHTML = items.map(([v, label]) =>
+    '<label><input type="checkbox" value="'+BT.esc(String(v))+'"'+(chosen.map(String).includes(String(v)) ? ' checked' : '')+'> '+BT.esc(label)+'</label>').join('')
+    || '<span class="muted">—</span>';
+}
+const ruPicked = (id) => [...document.querySelectorAll('#'+id+' input:checked')].map(x => x.value);
+async function ruRenderTool(rule){
+  const T = window.t, E = BT.esc;
+  const tool = ruToolOf(document.getElementById('ru-tool').value);
+  ruChecks('ru-perms', tool.permissions.map(p => [p.id, p.label]), rule.perms || []);
+  const scope = rule.scope || {};
+  let h = '';
+  for(const res of tool.resources){
+    const sel = scope[res.key] || null;
+    const choices = await ruLoadChoices(tool.type, res);
+    h += '<div class="ru-res" data-key="'+E(res.key)+'"><h4>'+E(res.label)+'</h4>'
+      + '<label style="margin-right:14px"><input type="radio" name="ru-any-'+E(res.key)+'" value="any"'+(sel ? '' : ' checked')+'> '+E(T('settings.rules_any'))+'</label>'
+      + '<label><input type="radio" name="ru-any-'+E(res.key)+'" value="some"'+(sel ? ' checked' : '')+'> '+E(T('settings.rules_some'))+'</label>'
+      + '<div class="ru-sub" '+(sel ? '' : 'hidden')+'>';
+    if(choices.length){
+      h += '<div class="ru-checks ru-values">' + choices.map(c => '<label><input type="checkbox" value="'+E(c.id)+'"'
+        + ((sel && sel.values || []).includes(c.id) ? ' checked' : '')+'> '+E(c.name)+'</label>').join('') + '</div>';
+    } else {
+      h += '<div class="frow"><label>'+E(T('settings.rules_values'))+'</label><input type="text" class="ru-values-text" value="'
+        + E(((sel && sel.values) || []).join(', '))+'" placeholder="'+E(res.values_hint || '')+'"></div>';
+    }
+    for(const a of (res.attrs || [])){
+      if(a.values){
+        h += '<div class="frow"><label>'+E(a.label)+'</label><div class="ru-checks ru-attr" data-attr="'+E(a.key)+'">'
+          + a.values.map(v => '<label><input type="checkbox" value="'+E(v.id)+'"'+(((sel && sel[a.key]) || []).includes(v.id) ? ' checked' : '')+'> '+E(v.label)+'</label>').join('')
+          + '</div></div>';
+      } else {
+        h += '<div class="frow"><label>'+E(a.label)+'</label><input type="text" class="ru-attr-text" data-attr="'+E(a.key)+'" value="'
+          + E((sel && sel[a.key]) || '')+'" placeholder="'+E(a.hint || '1-12, 15')+'"></div>';
+      }
+    }
+    h += '<div class="muted">'+E(T('settings.rules_or_hint'))+'</div></div></div>';
+  }
+  const sc = document.getElementById('ru-scope');
+  sc.innerHTML = h;
+  sc.querySelectorAll('input[type=radio]').forEach(r => r.onchange = () => {
+    r.closest('.ru-res').querySelector('.ru-sub').hidden = r.closest('.ru-res').querySelector('input[value=some]').checked === false;
+  });
+}
+async function ruOpen(rule){
+  const T = window.t;
+  RU_EDIT = rule && rule.id ? rule.id : null;
+  rule = rule || {};
+  document.getElementById('ru-ed-title').textContent = T(RU_EDIT ? 'settings.rules_edit' : 'settings.rules_new');
+  const sel = document.getElementById('ru-tool');
+  sel.innerHTML = RULES.tools.map(t => '<option value="'+BT.esc(t.type)+'">'+BT.esc(t.label)+'</option>').join('');
+  if(rule.tool) sel.value = rule.tool;
+  sel.disabled = !!RU_EDIT;
+  sel.onchange = () => ruRenderTool({});
+  const p = rule.principals || {};
+  ruChecks('ru-roles', Object.entries(RULES.roles).filter(([id]) => id !== 'admin'), p.roles || []);
+  ruChecks('ru-groups', GROUPS.map(g => [g.id, g.name]), p.groups || []);
+  ruChecks('ru-users', USERS.filter(u => u.role !== 'admin').map(u => [u.id, u.username]), p.users || []);
+  const ctrls = RULES.controllers || [];
+  ruChecks('ru-ctrls', ctrls.map(c => [c.id, c.name + ' (' + c.addresses.join(', ') + ')']), p.controllers || []);
+  // Adresses brutes : celles qui ne désignent pas un contrôleur déclaré.
+  document.getElementById('ru-ctrl').value = (p.controllers || []).filter(x => !String(x).startsWith('ctl:')).join(', ');
+  document.getElementById('ru-note').value = rule.note || '';
+  const mode = rule.mode || (RU_EDIT ? 'allow' : 'reserve');
+  document.querySelectorAll('input[name=ru-mode]').forEach(x => { x.checked = x.value === mode; });
+  document.getElementById('ru-msg').textContent = '';
+  await ruRenderTool(rule);
+  document.getElementById('ru-editor').hidden = false;
+  document.getElementById('ru-editor').scrollIntoView({behavior:'smooth', block:'start'});
+}
+document.getElementById('ru-new').onclick = () => ruOpen(null);
+document.getElementById('ru-cancel').onclick = () => { document.getElementById('ru-editor').hidden = true; };
+document.getElementById('ru-save').onclick = async () => {
+  const scope = {};
+  document.querySelectorAll('#ru-scope .ru-res').forEach(box => {
+    if(!box.querySelector('input[value=some]').checked) return;
+    const sel = {};
+    const vals = box.querySelector('.ru-values')
+      ? [...box.querySelectorAll('.ru-values input:checked')].map(x => x.value)
+      : (box.querySelector('.ru-values-text').value || '').split(/[,;]+/).map(x => x.trim()).filter(Boolean);
+    if(vals.length) sel.values = vals;
+    box.querySelectorAll('.ru-attr').forEach(a => { const v = [...a.querySelectorAll('input:checked')].map(x => x.value); if(v.length) sel[a.dataset.attr] = v; });
+    box.querySelectorAll('.ru-attr-text').forEach(a => { if(a.value.trim()) sel[a.dataset.attr] = a.value.trim(); });
+    // « Certains » sans rien de choisi ne couvrirait rien : on le dit plutôt que d'écrire une règle morte.
+    scope[box.dataset.key] = Object.keys(sel).length ? sel : {values: ['__aucun__']};
+  });
+  const body = {
+    tool: document.getElementById('ru-tool').value,
+    perms: ruPicked('ru-perms'),
+    principals: {roles: ruPicked('ru-roles'), groups: ruPicked('ru-groups').map(Number), users: ruPicked('ru-users').map(Number),
+                 controllers: ruPicked('ru-ctrls').concat(document.getElementById('ru-ctrl').value.split(/[,;\s]+/).map(x => x.trim()).filter(Boolean))},
+    scope, note: document.getElementById('ru-note').value,
+    mode: (document.querySelector('input[name=ru-mode]:checked') || {}).value || 'reserve',
+  };
+  if(Object.values(scope).some(s => (s.values || [])[0] === '__aucun__')){
+    document.getElementById('ru-msg').textContent = '✕ ' + window.t('settings.rules_empty_some'); return;
+  }
+  // Avertissement CHIFFRÉ avant d'enregistrer : qui perd quoi. Une règle « Autoriser
+  // seulement » retire la permission à tous ceux qu'elle ne nomme pas, sur TOUT l'outil —
+  // c'est précisément ce qu'on ne doit pas découvrir après coup.
+  try {
+    const imp = (await BT.fetchJSON('/api/access-rules/impact', {body: {rule: body, id: RU_EDIT}})).impact;
+    const T = window.t, lignes = [];
+    imp.forEach(i => {
+      const qui = i.losers.concat(i.controllers.map(c => T('settings.rules_controller')+' '+c));
+      if(!qui.length) return;
+      const liste = qui.slice(0, 8).join(', ') + (qui.length > 8 ? ' (+' + (qui.length - 8) + ')' : '');
+      const cle = i.mode === 'deny' ? (i.everywhere ? 'settings.rules_impact_deny_all' : 'settings.rules_impact_deny')
+                : i.mode === 'reserve' ? 'settings.rules_impact_reserve' : 'settings.rules_impact_allow';
+      lignes.push('• ' + i.label + ' — ' + T(cle).replace('{n}', qui.length) + ' ' + liste);
+    });
+    if(lignes.length && !confirm(T('settings.rules_impact_title') + '\n\n' + lignes.join('\n') + '\n\n' + T('settings.rules_impact_confirm'))) return;
+  } catch(e){ document.getElementById('ru-msg').textContent = '✕ ' + e.message; return; }
+  try {
+    await BT.fetchJSON('/api/access-rules' + (RU_EDIT ? '/'+RU_EDIT : ''), {method: RU_EDIT ? 'PUT' : 'POST', body});
+    document.getElementById('ru-editor').hidden = true;
+    BT.toast(window.t('js.saved')); loadRules();
+  } catch(e){ document.getElementById('ru-msg').textContent = '✕ ' + e.message; }
+};
+
+// ── Contrôleurs broadcast ────────────────────────────────────────────────────
+let CTL_EDIT = null;
+async function loadControllers(){
+  const box = document.getElementById('ctl-list'), T = window.t, E = BT.esc;
+  let d;
+  try { d = await BT.fetchJSON('/api/controllers'); } catch(e){ box.textContent = e.message; return; }
+  if(!d.controllers.length){ box.textContent = T('settings.ctl_none'); return; }
+  box.innerHTML = '<table class="set-tbl"><thead><tr><th>'+E(T('settings.ctl_name'))+'</th><th>'+E(T('settings.ctl_addresses'))+'</th><th>'
+    + E(T('settings.ctl_protocols'))+'</th><th>'+E(T('settings.ctl_rules'))+'</th><th></th></tr></thead><tbody>'
+    + d.controllers.map(c => '<tr><td><b>'+E(c.name)+'</b>'+(c.note ? '<div class="muted">'+E(c.note)+'</div>' : '')+'</td>'
+      + '<td class="mono">'+E(c.addresses.join(', '))+'</td>'
+      + '<td>'+E(c.protocols.map(p => p === 'swp08' ? 'SW-P-08' : 'Ember+').join(', ') || '—')+'</td>'
+      + '<td>'+c.rules+'</td><td><div class="pl-actions" style="justify-content:flex-end">'
+      + '<button class="btn btn-sm ctl-edit" data-id="'+c.id+'">'+E(T('settings.rules_edit'))+'</button>'
+      + '<button class="btn btn-sm btn-red ctl-del" data-id="'+c.id+'"'+(c.rules ? ' disabled title="'+E(T('settings.ctl_in_use'))+'"' : '')+'>'+E(T('settings.delete'))+'</button>'
+      + '</div></td></tr>').join('') + '</tbody></table>';
+  box.querySelectorAll('.ctl-edit').forEach(b => b.onclick = () => ctlOpen(d.controllers.find(c => c.id === +b.dataset.id)));
+  box.querySelectorAll('.ctl-del').forEach(b => b.onclick = async () => {
+    if(!confirm(T('js.confirm'))) return;
+    try { await BT.fetchJSON('/api/controllers/'+b.dataset.id, {method:'DELETE'}); loadControllers(); }
+    catch(e){ BT.toast(e.message,'error'); }
+  });
+}
+function ctlOpen(c){
+  CTL_EDIT = c ? c.id : null;
+  document.getElementById('ctl-ed-title').textContent = window.t(c ? 'settings.rules_edit' : 'settings.ctl_new');
+  document.getElementById('ctl-name').value = c ? c.name : '';
+  document.getElementById('ctl-addr').value = c ? c.addresses.join(', ') : '';
+  document.getElementById('ctl-note').value = c ? c.note : '';
+  document.querySelectorAll('.ctl-proto').forEach(x => { x.checked = !!c && c.protocols.includes(x.value); });
+  document.getElementById('ctl-cancel').hidden = !c;
+  document.getElementById('ctl-msg').textContent = '';
+  if(c) document.getElementById('ctl-name').focus();
+}
+document.getElementById('ctl-cancel').onclick = () => ctlOpen(null);
+document.getElementById('ctl-save').onclick = async () => {
+  const body = {name: document.getElementById('ctl-name').value,
+    addresses: document.getElementById('ctl-addr').value.split(/[,;\s]+/).filter(Boolean),
+    protocols: [...document.querySelectorAll('.ctl-proto:checked')].map(x => x.value),
+    note: document.getElementById('ctl-note').value};
+  try {
+    await BT.fetchJSON('/api/controllers'+(CTL_EDIT ? '/'+CTL_EDIT : ''), {method: CTL_EDIT ? 'PUT' : 'POST', body});
+    BT.toast(window.t('js.saved')); ctlOpen(null); loadControllers();
+  } catch(e){ document.getElementById('ctl-msg').textContent = '✕ ' + e.message; }
+};
+
+// ── Plugins ──────────────────────────────────────────────────────────────────
+async function loadPlugins(){
+  const d = await BT.fetchJSON('/api/plugins');
+  if(!GROUPS.length){ try { GROUPS = await BT.fetchJSON('/api/groups'); } catch(e){ GROUPS = []; } }
+  const se = document.getElementById('scan-errors');
+  se.innerHTML = Object.keys(d.scan_errors||{}).length
+    ? '<div class="toast warning" style="position:static;margin-bottom:10px">'+
+      Object.entries(d.scan_errors).map(([n,r]) => BT.esc(n)+' — '+BT.esc(r)).join('<br>')+'</div>' : '';
+  const tb = document.querySelector('#plugins-tbl tbody');
+  tb.innerHTML = d.plugins.map(p => {
+    const vers = p.versions.map(v => '<option value="'+v+'"'+(v===p.version?' selected':'')+'>'+v+'</option>').join('');
+    const roles = Object.entries(ROLES).map(([rid,rl]) => {
+      const on = p.access ? (p.access.roles||[]).includes(rid) : (rid==='admin'||rid==='operator');
+      return '<label><input type="checkbox" class="acc" data-type="'+p.type+'" data-role="'+rid+'"'+(on?' checked':'')+'>'+BT.esc(rl)+'</label>';
+    }).join('');
+    // Groupes : s'ajoutent aux rôles (l'accès est accordé dès qu'UNE des cases correspond).
+    const gsel = GROUPS.length ? '<div class="acc-groups"><span class="muted">'
+      + BT.esc(window.t('settings.access_groups')) + '</span> '
+      + GROUPS.map(g => '<label><input type="checkbox" class="accg" data-type="'+p.type+'" data-gid="'+g.id+'"'
+          + (((p.access||{}).groups||[]).includes(g.id) ? ' checked' : '') + '>'+BT.esc(g.name)+'</label>').join('')
+      + '</div>' : '';
+    const isDocker = p.runtime === 'docker';
+    const rv = p.running_version || '', stale = isDocker && p.up_to_date === false;
+    const verExtra = isDocker
+      ? '<div class="pl-run">en cours : ' + (rv ? 'v'+BT.esc(rv) : '—')
+          + (p.running ? (stale ? ' <span class="pl-warn">⚠ décalage</span>' : ' <span class="pl-ok">✓</span>') : ' (arrêté)') + '</div>'
+      : '';
+    const migBtn = stale ? '<button class="btn btn-sm btn-orange pl-migrate" data-type="'+p.type+'">⬆ Migrer v'+BT.esc(p.available_version||p.version)+'</button>' : '';
+    return '<tr><td><strong>'+BT.esc(p.label)+'</strong><br><span class="muted">'+BT.esc(p.type)+'</span></td>'
+      +'<td><span class="pill">'+BT.esc(p.runtime)+'</span></td>'
+      +'<td><select class="pl-ver" data-type="'+p.type+'">'+vers+'</select>'+verExtra+'</td>'
+      +'<td class="access-roles">'+roles+gsel+'</td>'
+      +'<td><div class="pl-actions">'
+        + migBtn
+        +'<button class="btn btn-sm pl-toggle" data-type="'+p.type+'" data-dis="'+p.disabled+'">'+(p.disabled?window.t('settings.enable'):window.t('settings.disable'))+'</button>'
+        +'<a class="btn btn-sm" href="/api/plugins/'+p.type+'/export">'+window.t('settings.export')+'</a>'
+        +'<button class="btn btn-sm btn-red pl-del" data-type="'+p.type+'">'+window.t('settings.delete')+'</button>'
+      +'</div></td></tr>';
+  }).join('');
+  tb.querySelectorAll('.pl-ver').forEach(s => s.onchange = async () => {
+    const type = s.dataset.type, ver = s.value, p = d.plugins.find(x => x.type === type);
+    try {
+      await BT.fetchJSON('/api/plugins/'+type+'/activate', {body:{version:ver}});
+      if (p && p.runtime === 'docker') {   // recréer le conteneur sur la version activée
+        BT.toast('Activation v'+ver+' + recréation du conteneur…','info');
+        await BT.fetchJSON('/api/tools/'+type+'/lifecycle', {body:{action:'migrate'}});
+      }
+      BT.toast(window.t('js.saved')); loadPlugins();
+    } catch(e){ BT.toast(e.message,'error'); loadPlugins(); }
+  });
+  tb.querySelectorAll('.pl-migrate').forEach(b => b.onclick = async () => {
+    if(!confirm('Migrer « '+b.dataset.type+' » : reconstruire l\'image si besoin et recréer le conteneur ?')) return;
+    BT.toast('Migration en cours…','info');
+    try {
+      const st = await BT.fetchJSON('/api/tools/'+b.dataset.type+'/lifecycle', {body:{action:'migrate'}});
+      // Image absente : elle se construit en arrière-plan, et le conteneur sera recréé à la fin.
+      BT.toast(st.build && st.build.state === 'en_cours'
+        ? 'Construction de l\'image en arrière-plan — suivi dans Déploiement → Images ou dans la barre d\'état de l\'outil.'
+        : 'Migré', 'info');
+      loadPlugins();
+    }
+    catch(e){ BT.toast(e.message,'error'); }
+  });
+  tb.querySelectorAll('.pl-toggle').forEach(b => b.onclick = () =>
+    BT.fetchJSON('/api/plugins/'+b.dataset.type+'/toggle', {body:{disabled: b.dataset.dis!=='true'}}).then(loadPlugins));
+  tb.querySelectorAll('.pl-del').forEach(b => b.onclick = async () => {
+    if(!confirm(window.t('js.confirm'))) return;
+    try { await BT.fetchJSON('/api/plugins/'+b.dataset.type, {method:'DELETE'}); loadPlugins(); }
+    catch(e){ BT.toast(e.message,'error'); }
+  });
+  // Sauvegarde de l'accès : à chaque changement de case, on POST la politique du type.
+  // Rôles et groupes sont envoyés ensemble ; la clé `users` n'est PAS transmise, donc
+  // les accès accordés nommément à un utilisateur restent intacts (mise à jour partielle).
+  const saveAccess = type => {
+    const roles = [...tb.querySelectorAll('.acc[data-type="'+type+'"]:checked')].map(x => x.dataset.role);
+    const groups = [...tb.querySelectorAll('.accg[data-type="'+type+'"]:checked')].map(x => +x.dataset.gid);
+    BT.fetchJSON('/api/tools/'+type+'/access', {body:{roles, groups}}).then(()=>BT.toast(window.t('js.saved')));
+  };
+  tb.querySelectorAll('.acc, .accg').forEach(c => c.onchange = () => saveAccess(c.dataset.type));
+}
+document.getElementById('imp-btn').onclick = async () => {
+  const f = document.getElementById('imp-file').files[0];
+  if(!f){ BT.toast(window.t('settings.pick_file'),'warning'); return; }
+  const fd = new FormData(); fd.append('package', f);
+  try { const r = await fetch('/api/plugins/import', {method:'POST', body: fd}); const j = await r.json();
+    if(!r.ok) throw new Error(j.error||r.status);
+    BT.toast(window.t('settings.imported')+' '+j.type+' v'+j.version); loadPlugins();
+  } catch(e){ BT.toast(e.message,'error'); }
+};
+
+// ── Services globaux ───────────────────────────────────────────────────────────
+async function loadServices(){
+  const d = await BT.fetchJSON('/api/services');
+  const se = document.getElementById('svc-scan-errors');
+  se.innerHTML = Object.keys(d.scan_errors||{}).length
+    ? '<div class="toast warning" style="position:static;margin-bottom:10px">'+
+      Object.entries(d.scan_errors).map(([n,r]) => BT.esc(n)+' — '+BT.esc(r)).join('<br>')+'</div>' : '';
+  const tb = document.querySelector('#services-tbl tbody');
+  tb.innerHTML = d.services.map(s => {
+    const vers = s.versions.map(v => '<option value="'+v+'"'+(v===s.version?' selected':'')+'>'+v+'</option>').join('');
+    return '<tr><td><strong>'+BT.esc(s.label)+'</strong><br><span class="muted">'+BT.esc(s.id)+'</span>'
+      + (s.description ? '<div class="muted" style="margin-top:4px">'+BT.esc(s.description)+'</div>' : '') + '</td>'
+      +'<td><select class="svc-ver" data-id="'+s.id+'">'+vers+'</select></td>'
+      +'<td><div class="pl-actions">'
+        +'<button class="btn btn-sm svc-toggle" data-id="'+s.id+'" data-dis="'+s.disabled+'">'+(s.disabled?window.t('settings.enable'):window.t('settings.disable'))+'</button>'
+        +'<a class="btn btn-sm" href="/api/services/'+s.id+'/export">'+window.t('settings.export')+'</a>'
+        +'<button class="btn btn-sm btn-red svc-del" data-id="'+s.id+'">'+window.t('settings.delete')+'</button>'
+      +'</div></td></tr>';
+  }).join('') || '<tr><td colspan="3" class="muted">'+window.t('settings.services_empty')+'</td></tr>';
+  tb.querySelectorAll('.svc-ver').forEach(sel => sel.onchange = async () => {
+    try {
+      await BT.fetchJSON('/api/services/'+sel.dataset.id+'/activate', {body:{version:sel.value}});
+      BT.toast(window.t('settings.service_restart_needed')); loadServices();
+    } catch(e){ BT.toast(e.message,'error'); loadServices(); }
+  });
+  tb.querySelectorAll('.svc-toggle').forEach(b => b.onclick = () =>
+    BT.fetchJSON('/api/services/'+b.dataset.id+'/toggle', {body:{disabled: b.dataset.dis!=='true'}}).then(loadServices));
+  tb.querySelectorAll('.svc-del').forEach(b => b.onclick = async () => {
+    if(!confirm(window.t('js.confirm'))) return;
+    try { await BT.fetchJSON('/api/services/'+b.dataset.id, {method:'DELETE'}); loadServices(); }
+    catch(e){ BT.toast(e.message,'error'); }
+  });
+}
+document.getElementById('svc-imp-btn').onclick = async () => {
+  const f = document.getElementById('svc-imp-file').files[0];
+  if(!f){ BT.toast(window.t('settings.pick_file'),'warning'); return; }
+  const fd = new FormData(); fd.append('package', f);
+  try { const r = await fetch('/api/services/import', {method:'POST', body: fd}); const j = await r.json();
+    if(!r.ok) throw new Error(j.error||r.status);
+    BT.toast(window.t('settings.imported')+' '+j.id+' v'+j.version); loadServices();
+  } catch(e){ BT.toast(e.message,'error'); }
+};
+
+// ── Traductions ──────────────────────────────────────────────────────────────
+async function loadI18n(){
+  const langs = await BT.fetchJSON('/api/i18n/langs');
+  const sel = document.getElementById('i18n-lang');
+  if(!sel.dataset.init){ sel.innerHTML = langs.filter(l=>l.code!=='fr').map(l => '<option value="'+l.code+'">'+BT.esc(l.label)+'</option>').join(''); sel.dataset.init='1';
+    sel.onchange = renderI18nRows; document.getElementById('i18n-export').onclick = () => location.href='/api/i18n/export?lang='+sel.value; }
+  renderI18nRows();
+}
+async function renderI18nRows(){
+  const lang = document.getElementById('i18n-lang').value;
+  const rows = await BT.fetchJSON('/api/i18n/rows?lang='+lang);
+  document.getElementById('i18n-rows').innerHTML = rows.map(r =>
+    '<tr><td><code class="muted">'+BT.esc(r.key)+'</code></td><td class="i18n-src">'+BT.esc(r.source)+'</td>'
+    +'<td><input data-key="'+BT.esc(r.key)+'" value="'+BT.esc(r.value)+'"></td></tr>').join('');
+  document.querySelectorAll('#i18n-rows input').forEach(i => i.onchange = () =>
+    BT.fetchJSON('/api/i18n/override', {body:{lang, key:i.dataset.key, value:i.value}}).then(()=>BT.toast(window.t('js.saved'))));
+}
+
+// ── Journal ──────────────────────────────────────────────────────────────────
+async function loadAudit(){
+  const tool = document.getElementById('a-tool').value;
+  const d = await BT.fetchJSON('/api/audit'+(tool?('?tool='+encodeURIComponent(tool)):''));
+  const ts = document.getElementById('a-tool');
+  if(!ts.dataset.init){ ts.innerHTML = '<option value="">'+window.t('settings.all')+'</option>'+
+    d.tools.map(t => '<option value="'+BT.esc(t)+'">'+BT.esc(t)+'</option>').join(''); ts.dataset.init='1'; }
+  document.getElementById('audit-rows').innerHTML = d.rows.map(r =>
+    '<tr><td class="muted">'+BT.esc(r.ts||'')+'</td><td>'+BT.esc(r.username||'—')+'</td>'
+    +'<td><span class="pill">'+BT.esc(r.tool||'')+'</span></td><td>'+BT.esc(r.action||'')+'</td>'
+    +'<td class="muted">'+BT.esc(r.detail||'')+'</td></tr>').join('')
+    || '<tr><td colspan="5" class="muted">'+window.t('settings.audit_empty')+'</td></tr>';
+}
+document.getElementById('a-refresh').onclick = loadAudit;
+document.getElementById('a-tool').onchange = loadAudit;
+
+// ── Sauvegarde ───────────────────────────────────────────────────────────────
+async function loadBackup(){
+  SETTINGS = await BT.fetchJSON('/api/settings');
+  document.getElementById('bk-enabled').checked = !!SETTINGS.backup_enabled;
+  document.getElementById('bk-time').value = SETTINGS.backup_time || '02:00';
+  document.getElementById('bk-retention').value = SETTINGS.backup_retention || 14;
+  const d = await BT.fetchJSON('/api/backup/list');
+  document.getElementById('bk-status').textContent = d.last_status ? (window.t('settings.backup_last')+' '+d.last_status) : '';
+  document.getElementById('bk-list').innerHTML = (d.backups||[]).map(b =>
+    '<tr><td>'+BT.esc(b.name)+'</td><td class="muted">'+(b.size/1048576).toFixed(2)+' MB</td></tr>').join('');
+}
+document.getElementById('bk-save').onclick = () => BT.fetchJSON('/api/settings', {body:{
+  backup_enabled: document.getElementById('bk-enabled').checked,
+  backup_time: document.getElementById('bk-time').value,
+  backup_retention: parseInt(document.getElementById('bk-retention').value)||14,
+}}).then(()=>BT.toast(window.t('js.saved')));
+document.getElementById('bk-run').onclick = async () => {
+  try { const j = await BT.fetchJSON('/api/backup/run', {method:'POST'}); BT.toast(window.t('settings.backup_done')+' '+j.file); loadBackup(); }
+  catch(e){ BT.toast(e.message,'error'); }
+};
+
+// ── Déploiement / Mises à jour ─────────────────────────────────────────────────
+// Sous-onglets Flotte / GitHub / Paquet. Le hash porte `#deploy/<sous-onglet>` pour qu'un
+// rechargement revienne au même endroit.
+let depSub = 'fleet';
+function switchDepSub(st){
+  if(!document.getElementById('dep-sub-'+st)) st = 'fleet';
+  depSub = st;
+  document.querySelectorAll('#dep-subtabs .subtab').forEach(b => b.classList.toggle('active', b.dataset.st === st));
+  document.querySelectorAll('.dep-sub').forEach(d => { d.hidden = d.id !== 'dep-sub-'+st; });
+  if(history.replaceState) history.replaceState(null, '', '#deploy/'+st);
+  if(st === 'fleet') loadFleet();
+  else if(st === 'github') loadGit();
+  else if(st === 'images') loadImages();
+  else loadPackage();
+}
+document.querySelectorAll('#dep-subtabs .subtab').forEach(b => b.onclick = () => switchDepSub(b.dataset.st));
+
+async function loadDeploy(){
+  loadRollback();
+  switchDepSub(((location.hash||'').split('/')[1]) || depSub);
+}
+
+// ── Retour arrière (sauvegarde commune pull/push/import) ─────────────────────
+async function loadRollback(){
+  try {
+    const d = await BT.fetchJSON('/api/update/self');
+    document.getElementById('dep-rollback').hidden = !d.has_backup;
+    document.getElementById('dep-rollback-info').textContent =
+      window.t('settings.fleet_backup_avail') + ' ' + (d.backup || '');
+    return d;
+  } catch(e){ return null; }
+}
+document.getElementById('dep-rollback-btn').onclick = async () => {
+  if(!confirm(window.t('settings.deploy_rollback_confirm'))) return;
+  try { const r = await BT.fetchJSON('/api/update/rollback', {method:'POST'}); BT.toast(r.message); }
+  catch(e){ BT.toast(e.message,'error'); }
+};
+
+// ── Flotte ───────────────────────────────────────────────────────────────────
+const flMsg = (txt, kind) => {
+  const el = document.getElementById('fl-msg');
+  el.textContent = txt || '';
+  el.style.color = kind === 'ok' ? 'var(--status-running-fg)' : kind === 'err' ? 'var(--status-stopped-fg)' : '';
+};
+const fmtTs = (v) => v ? String(v).replace('T', ' ') : '—';
+
+async function loadFleet(){
+  const self = await loadRollback();
+  if(self){
+    document.getElementById('fl-server').checked = !!self.server_enabled;
+    document.getElementById('fl-token').value = self.token || '';
+    const id = self.identity || {};
+    document.getElementById('fl-self').textContent = window.t('settings.fleet_this') + ' ' + (id.label || '—')
+      + (id.deployed_at ? ' · ' + window.t('settings.fleet_deployed_on') + ' ' + fmtTs(id.deployed_at) : '')
+      + (id.git_checkout ? ' · ' + window.t('settings.fleet_is_git') : '');
+  }
+  renderPeers();
+}
+
+async function renderPeers(){
+  const box = document.getElementById('fl-table');
+  try {
+    const j = await BT.fetchJSON('/api/peers');
+    const cidr = document.getElementById('fl-cidr');
+    if(!cidr.value && j.default_cidr) cidr.value = j.default_cidr;
+    const mine = (j.self || {}).label || '';
+    if(!j.peers.length){ box.textContent = window.t('settings.fleet_none'); return; }
+    box.innerHTML = '<div style="overflow-x:auto"><table class="set-tbl"><thead><tr>'
+      + '<th>'+window.t('settings.fleet_col_name')+'</th><th>URL</th><th>Version</th>'
+      + '<th>'+window.t('settings.fleet_col_deployed')+'</th><th>'+window.t('settings.fleet_col_seen')+'</th><th></th></tr></thead><tbody>'
+      + j.peers.map(p => {
+          const ver = p.version
+            ? '<span class="'+(p.version === mine ? 'muted' : 'fl-ver-diff')+'">'+BT.esc(p.version)+'</span>'
+            : '<span class="muted">?</span>';
+          return '<tr><td>'+BT.esc(p.name || '')+(p.has_token ? '' : ' <span class="pill" title="'+BT.esc(window.t('settings.fleet_shared_token_tip'))+'">'+window.t('settings.fleet_shared_token')+'</span>')+'</td>'
+            + '<td class="mono" style="font-size:0.85em">'+BT.esc(p.url)+'</td>'
+            + '<td>'+ver+'</td><td class="muted">'+BT.esc(fmtTs(p.deployed_at))+'</td>'
+            + '<td class="muted">'+BT.esc(fmtTs(p.last_seen))+'</td>'
+            + '<td><div class="pl-actions" style="justify-content:flex-end">'
+            + '<button class="btn btn-sm fl-pull" data-id="'+p.id+'" title="'+BT.esc(window.t('settings.fleet_pull_tip'))+'">⬇ Pull</button>'
+            + '<button class="btn btn-sm fl-push" data-id="'+p.id+'" title="'+BT.esc(window.t('settings.fleet_push_tip'))+'">⬆ Push</button>'
+            + '<button class="btn btn-sm btn-red fl-del" data-id="'+p.id+'" aria-label="'+BT.esc(window.t('settings.delete'))+'">✕</button>'
+            + '</div></td></tr>';
+        }).join('') + '</tbody></table></div>';
+    box.querySelectorAll('.fl-pull').forEach(b => b.onclick = () => runUpdate(+b.dataset.id, 'pull'));
+    box.querySelectorAll('.fl-push').forEach(b => b.onclick = () => runUpdate(+b.dataset.id, 'push'));
+    box.querySelectorAll('.fl-del').forEach(b => b.onclick = async () => {
+      if(!confirm(window.t('settings.fleet_del_confirm'))) return;
+      try { await BT.fetchJSON('/api/peers/'+b.dataset.id, {method:'DELETE'}); renderPeers(); }
+      catch(e){ BT.toast(e.message,'error'); }
+    });
+  } catch(e){ box.textContent = e.message; }
+}
+
+// Le mode serveur : on relit TOUJOURS l'état renvoyé par le serveur et on aligne la case
+// dessus — un POST en échec ne doit pas laisser croire que le mode est actif.
+async function postServer(body){
+  const msg = document.getElementById('fl-token-msg');
+  try {
+    const j = await BT.fetchJSON('/api/update/server', {body});
+    document.getElementById('fl-server').checked = !!j.server_enabled;
+    document.getElementById('fl-token').value = j.token || '';
+    msg.textContent = window.t('js.saved'); msg.style.color = 'var(--status-running-fg)';
+  } catch(e){
+    msg.textContent = '✕ ' + e.message; msg.style.color = 'var(--status-stopped-fg)';
+    loadFleet();
+  }
+}
+document.getElementById('fl-server').onchange = (e) => postServer({enabled: e.target.checked});
+document.getElementById('fl-token-save').onclick = () => postServer({token: document.getElementById('fl-token').value});
+document.getElementById('fl-token-regen').onclick = () => {
+  if(!confirm(window.t('settings.fleet_regen_confirm'))) return;
+  postServer({regen_token: true});
+};
+document.getElementById('fl-add').onclick = async () => {
+  const url = document.getElementById('fl-url').value.trim();
+  if(!url){ BT.toast(window.t('settings.deploy_need_peer'),'warning'); return; }
+  try {
+    await BT.fetchJSON('/api/peers', {body: {name: document.getElementById('fl-name').value.trim(),
+      url, token: document.getElementById('fl-ptoken').value.trim()}});
+    ['fl-name','fl-url','fl-ptoken'].forEach(id => { document.getElementById(id).value = ''; });
+    renderPeers();
+  } catch(e){ BT.toast(e.message,'error'); }
+};
+document.getElementById('fl-refresh').onclick = async () => {
+  document.getElementById('fl-table').textContent = '…';
+  try { await BT.fetchJSON('/api/peers/refresh', {method:'POST'}); } catch(e){}
+  renderPeers();
+};
+document.getElementById('fl-scan').onclick = async () => {
+  const res = document.getElementById('fl-scan-res');
+  res.textContent = window.t('settings.fleet_scanning');
+  try {
+    const j = await BT.fetchJSON('/api/peers/discover', {body: {cidr: document.getElementById('fl-cidr').value.trim()}});
+    if(!j.found.length){ res.textContent = window.t('settings.fleet_scan_none') + ' ' + j.cidr; return; }
+    res.innerHTML = BT.esc(window.t('settings.fleet_scan_found') + ' ' + j.cidr + ' :') + ' ';
+    j.found.forEach(f => {
+      const b = document.createElement('button');
+      b.className = 'btn btn-sm'; b.style.margin = '2px';
+      b.textContent = f.url + ' — ' + (f.name || '?') + ' (' + (f.label || '?') + ')';
+      b.onclick = () => { document.getElementById('fl-url').value = f.url;
+                          document.getElementById('fl-name').value = f.name || ''; };
+      res.appendChild(b);
+    });
+  } catch(e){ res.textContent = '✕ ' + e.message; }
+};
+
+// Composition par instance : les composants « nouveaux » ne sont installés sur la cible
+// que s'ils sont cochés dans l'aperçu — un outil n'apparaît jamais tout seul sur un site.
+let flInstallNew = null;
+function flInstallNewPayload(){
+  if(!flInstallNew) return null;
+  const p = [...flInstallNew.plugins], s = [...flInstallNew.services];
+  return (p.length || s.length) ? {plugins: p, services: s} : null;
+}
+
+function renderPreview(d){
+  flInstallNew = {plugins: new Set(), services: new Set()};
+  const T = (k) => window.t(k), E = BT.esc, c = d.counts || {};
+  let h = '<div class="fl-banner">⚠ ' + E(T('settings.fleet_banner')) + ' <b>' + E(d.target.label) + '</b> '
+        + '<span class="mono" style="font-size:0.85em">' + E(d.target.url) + '</span> '
+        + '<em>(' + E(T(d.target.is_local ? 'settings.fleet_this_instance' : 'settings.fleet_the_peer')) + ')</em></div>';
+  if(d.target.git_checkout)
+    h += '<div class="fl-banner">⚠ ' + E(T('settings.fleet_git_warning')) + '</div>';
+  h += '<div style="margin-bottom:10px">' + E(T('settings.fleet_version')) + ' <span class="muted">' + E(d.target.label)
+     + '</span> → <b>' + E(d.source.label) + '</b></div>';
+  if(d.warning){
+    h += '<div style="color:var(--status-stopped-fg)">⚠ ' + E(d.warning) + '</div>';
+    return h;
+  }
+  if(d.same_build) h += '<div class="muted" style="margin-bottom:8px">' + E(T('settings.fleet_same_build')) + '</div>';
+  h += '<div class="muted" style="margin-bottom:8px">' + (c.updated||0) + ' ' + E(T('settings.fleet_cnt_updated')) + ' · '
+     + (c.added||0) + ' ' + E(T('settings.fleet_cnt_added')) + ' · ' + (c.removed||0) + ' ' + E(T('settings.fleet_cnt_removed'))
+     + ' · ' + (c.unchanged||0) + ' ' + E(T('settings.fleet_cnt_unchanged')) + '</div>';
+  const rows = (list) => list.map(x => {
+    const ver = x.status === 'added' ? '— → ' + E(x.to) : x.status === 'removed' ? E(x.from) + ' → —'
+              : E(x.from || '—') + ' → ' + E(x.to || '—');
+    const st = x.status === 'added'
+      ? '<span class="fl-st-added">' + E(T('settings.fleet_st_new')) + '</span> <label style="display:inline-flex;gap:6px;align-items:center;margin-left:8px">'
+        + '<input type="checkbox" class="ios-toggle fl-new" data-kind="' + E(x.kind) + '" data-id="' + E(x.id) + '"> ' + E(T('settings.fleet_st_install')) + '</label>'
+      : '<span class="fl-st-' + E(x.status) + '">' + E(T('settings.fleet_st_' + x.status)) + '</span>';
+    return '<tr><td class="muted">' + E(x.kind) + '</td><td>' + E(x.label) + '</td><td class="mono" style="font-size:0.85em">' + ver + '</td><td>' + st + '</td></tr>';
+  }).join('');
+  const head = '<table class="set-tbl"><thead><tr><th>Type</th><th>' + E(T('settings.deploy_component')) + '</th><th>Version</th><th>'
+             + E(T('settings.deploy_state')) + '</th></tr></thead><tbody>';
+  const changed = (d.components||[]).filter(x => x.status !== 'unchanged');
+  const same = (d.components||[]).filter(x => x.status === 'unchanged');
+  if(c.added) h += '<div class="muted" style="margin-bottom:8px">' + E(T('settings.fleet_new_note')) + '</div>';
+  h += changed.length ? head + rows(changed) + '</tbody></table>' : '<div class="muted">' + E(T('settings.deploy_uptodate')) + '</div>';
+  if(same.length) h += '<details style="margin-top:8px"><summary class="muted" style="cursor:pointer">' + same.length + ' '
+                     + E(T('settings.fleet_unchanged_list')) + '</summary>' + head + rows(same) + '</tbody></table></details>';
+  if(d.reason) h += '<div style="color:var(--status-stopped-fg); margin-top:8px">✕ ' + E(d.reason) + '</div>';
+  return h;
+}
+
+// Modale de confirmation : résout true (confirmer) / false (annuler, Échap, ✕).
+function flConfirm(title, html, okLabel, okDisabled){
+  const m = document.getElementById('fl-modal');
+  document.getElementById('fl-modal-title').textContent = title;
+  document.getElementById('fl-modal-body').innerHTML = html;
+  const ok = document.getElementById('fl-modal-ok');
+  ok.textContent = okLabel; ok.disabled = !!okDisabled;
+  m.style.display = 'flex';
+  m.querySelectorAll('.fl-new').forEach(cb => cb.onchange = () => {
+    const set = cb.dataset.kind === 'plugin' ? flInstallNew.plugins : flInstallNew.services;
+    if(cb.checked) set.add(cb.dataset.id); else set.delete(cb.dataset.id);
+  });
+  (okDisabled ? document.getElementById('fl-modal-cancel') : ok).focus();
+  return new Promise(resolve => {
+    const done = (v) => { m.style.display = 'none'; document.removeEventListener('keydown', onKey); resolve(v); };
+    const onKey = (e) => { if(e.key === 'Escape') done(false); };
+    document.addEventListener('keydown', onKey);
+    ok.onclick = () => done(true);
+    document.getElementById('fl-modal-cancel').onclick = () => done(false);
+    document.getElementById('fl-modal-x').onclick = () => done(false);
+  });
+}
+
+async function runUpdate(id, direction){
+  flMsg(window.t('settings.fleet_analyzing'));
+  let d;
+  try { d = await BT.fetchJSON('/api/peers/'+id+'/preview?direction='+direction); }
+  catch(e){ flMsg('✕ ' + e.message, 'err'); return; }
+  flMsg('');
+  const pull = direction === 'pull';
+  if(!await flConfirm(window.t(pull ? 'settings.fleet_pull_title' : 'settings.fleet_push_title'),
+                      renderPreview(d), window.t(pull ? 'settings.fleet_pull_ok' : 'settings.fleet_push_ok'),
+                      !d.can_apply)) return;
+  flMsg(window.t(pull ? 'settings.fleet_pulling' : 'settings.fleet_pushing'));
+  try {
+    const r = await BT.fetchJSON('/api/peers/'+id+'/'+direction, {body: {install_new: flInstallNewPayload()}});
+    flMsg('✓ ' + (r.message || window.t('settings.fleet_push_started')), 'ok');
+    if(!pull) setTimeout(renderPeers, 8000);   // le pair redémarre : relire sa version ensuite
+  } catch(e){ flMsg('✕ ' + e.message, 'err'); }
+}
+
+// ── Paquet : sélection des plugins/services + construction ─────────────────────
+async function loadPackage(){
+  const d = await BT.fetchJSON('/api/deploy/info');
+  const b = d.build || {};
+  document.getElementById('dep-build-info').textContent = window.t('settings.deploy_current') + ' ' + (b.label || '—');
+  const sel = d.last_selection || {};
+  const fill = (kind, items, key) => {
+    const chosen = new Set(sel[kind] || []);
+    document.getElementById('dep-sel-'+kind).innerHTML = (items || []).map(x =>
+      '<label><input type="checkbox" class="dep-pick" data-kind="'+kind+'" value="'+BT.esc(x[key])+'"'
+      + (chosen.has(x[key]) ? ' checked' : '') + '> ' + BT.esc(x.label || x[key])
+      + ' <span class="pill">' + BT.esc(x.version || '') + '</span></label>').join('')
+      || '<span class="muted">—</span>';
+  };
+  fill('plugins', (d.available||{}).plugins, 'type');
+  fill('services', (d.available||{}).services, 'id');
+  const dl = document.getElementById('dep-dl');
+  if(d.dist){
+    dl.style.display = '';
+    dl.textContent = window.t('settings.deploy_download') + ' (' + (d.dist.size/1048576).toFixed(2) + ' MB)';
+  } else dl.style.display = 'none';
+}
+document.querySelectorAll('[data-sel]').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.dep-pick[data-kind="'+b.dataset.sel+'"]').forEach(cb => { cb.checked = b.dataset.v === '1'; });
+});
+document.getElementById('dep-build-btn').onclick = async () => {
+  const picked = (kind) => [...document.querySelectorAll('.dep-pick[data-kind="'+kind+'"]:checked')].map(cb => cb.value);
+  document.getElementById('dep-build-status').textContent = '…';
+  try {
+    const r = await BT.fetchJSON('/api/deploy/build', {body: {stamp: true, plugins: picked('plugins'), services: picked('services')}});
+    document.getElementById('dep-build-status').textContent =
+      r.file+' — '+(r.size/1048576).toFixed(2)+' MB · '+r.count+' '+window.t('settings.deploy_files')
+      +' · '+(r.plugins.length)+' plugins, '+(r.services.length)+' services';
+    loadPackage();
+  } catch(e){ document.getElementById('dep-build-status').textContent = e.message; }
+};
+
+// ── Source GitHub ──────────────────────────────────────────────────────────
+function renderGit(g){
+  const info = document.getElementById('git-info');
+  if(!g || !g.is_git){ info.textContent = window.t('settings.git_notgit'); return; }
+  const parts = [window.t('settings.git_branch')+' '+BT.esc(g.branch||'?'),
+                 'HEAD '+BT.esc(g.head||'?')];
+  if(g.behind) parts.push('<b>'+g.behind+'</b> '+window.t('settings.git_behind'));
+  else parts.push(window.t('settings.git_uptodate'));
+  if(g.ahead) parts.push('<b>'+g.ahead+'</b> '+window.t('settings.git_ahead'));
+  if(g.dirty) parts.push('<span style="color:var(--danger)">'+window.t('settings.git_dirty')+'</span>');
+  if(g.submodules_out_of_sync) parts.push(g.submodules_out_of_sync+' '+window.t('settings.git_subs'));
+  if(g.fetch_error) parts.push('<span style="color:var(--danger)">'+BT.esc(g.fetch_error)+'</span>');
+  info.innerHTML = parts.join(' · ');
+}
+async function loadGit(fetch){
+  const el = document.getElementById('git-info'); if(!el) return;
+  try { renderGit(await BT.fetchJSON('/api/git/status'+(fetch?'?fetch=1':''))); }
+  catch(e){ el.textContent = e.message; }
+}
+document.getElementById('git-check').onclick = async () => {
+  document.getElementById('git-status').textContent = '…';
+  await loadGit(true);
+  document.getElementById('git-status').textContent = '';
+};
+document.getElementById('git-update').onclick = async () => {
+  if(!confirm(window.t('settings.git_update_confirm'))) return;
+  document.getElementById('git-status').textContent = '…';
+  try { const r = await BT.fetchJSON('/api/git/update', {method:'POST'}); BT.toast(r.message);
+    document.getElementById('git-status').textContent = r.message; }
+  catch(e){ document.getElementById('git-status').textContent = e.message; BT.toast(e.message,'error'); }
+};
+document.getElementById('git-rollback').onclick = async () => {
+  if(!confirm(window.t('settings.git_rollback_confirm'))) return;
+  try { const r = await BT.fetchJSON('/api/git/rollback', {method:'POST'}); BT.toast(r.message);
+    document.getElementById('git-status').textContent = r.message; }
+  catch(e){ BT.toast(e.message,'error'); }
+};
+// ── Import d'un paquet .zip (hors-ligne) ───────────────────────────────────────
+document.getElementById('imp-pick').onclick = () => document.getElementById('dep-imp-file').click();
+document.getElementById('dep-imp-file').onchange = (e) => {
+  const f = e.target.files[0];
+  document.getElementById('imp-name').textContent = f ? f.name : '';
+  document.getElementById('imp-apply').disabled = !f;
+};
+document.getElementById('imp-apply').onclick = async () => {
+  const f = document.getElementById('dep-imp-file').files[0];
+  if(!f){ return; }
+  if(!confirm(window.t('settings.import_confirm'))) return;
+  document.getElementById('imp-status').textContent = '…';
+  try {
+    const fd = new FormData(); fd.append('file', f);
+    const r = await fetch('/api/deploy/import', {method:'POST', body:fd});
+    const j = await r.json();
+    if(!r.ok) throw new Error(j.error || ('HTTP '+r.status));
+    BT.toast(j.message); document.getElementById('imp-status').textContent = j.message;
+  } catch(e){ document.getElementById('imp-status').textContent = e.message; BT.toast(e.message,'error'); }
+};
+
+// ── Images des outils Docker ─────────────────────────────────────────────────
+// Construire / exporter ici (machine connectée), importer là-bas (machine isolée). Tant
+// qu'une construction tourne, on revient voir toutes les 3 s, et seulement sur cet écran.
+let imgTimer = null;
+function imgSize(n){ return n ? (n/1048576).toFixed(0)+' Mo' : ''; }
+async function loadImages(){
+  clearTimeout(imgTimer);
+  const box = document.getElementById('img-table');
+  let d;
+  try { d = await BT.fetchJSON('/api/deploy/images'); }
+  catch(e){ box.textContent = e.message; return; }
+  if(!d.docker){ box.textContent = window.t('settings.images_no_docker'); return; }
+  if(!d.tools.length){ box.textContent = window.t('settings.images_none'); return; }
+  let enCours = false;
+  const rows = d.tools.map(o => {
+    const b = o.build || {};
+    if(b.state === 'en_cours') enCours = true;
+    let local = o.present
+      ? '<span class="pill ok">'+window.t('settings.images_present')+'</span> <span class="muted">'+imgSize(o.size)+'</span>'
+      : '<span class="pill warn">'+window.t('settings.images_absent')+'</span>';
+    if(b.state === 'en_cours') local = '<span class="pill warn">'+window.t('settings.images_building')+'</span>'
+      + (b.migration ? ' <span class="muted">→ '+window.t('settings.images_migrate')+'</span>' : '');
+    else if(b.state === 'echec') local += '<details><summary class="muted">'+window.t('settings.images_build_failed')+
+      '</summary><pre style="white-space:pre-wrap;font-size:12px">'+BT.esc(b.erreur||'')+'</pre></details>';
+    const cont = o.running ? 'v'+BT.esc(o.running_version||'?') : '<span class="muted">'+window.t('settings.images_stopped')+'</span>';
+    const act = (o.present ? '<a class="btn btn-sm" href="/api/deploy/images/'+encodeURIComponent(o.type)+'/export">'+window.t('settings.images_export')+'</a> ' : '') +
+      (!o.present && o.can_build && b.state !== 'en_cours' ? '<button class="btn btn-sm" data-build="'+BT.esc(o.type)+'">'+window.t('settings.images_build')+'</button> ' : '') +
+      (o.present && o.running && !o.up_to_date ? '<button class="btn btn-sm btn-orange" data-migrate="'+BT.esc(o.type)+'">'+window.t('settings.images_migrate')+'</button>' : '');
+    return '<tr><td>'+BT.esc(o.label)+'</td><td><code>'+BT.esc(o.image)+'</code></td><td>'+local+'</td><td>'+cont+'</td><td style="white-space:nowrap">'+act+'</td></tr>';
+  }).join('');
+  box.classList.remove('muted');
+  box.innerHTML = '<div style="overflow-x:auto"><table class="set-tbl"><thead><tr><th>'+window.t('settings.images_col_tool')+'</th><th>'+
+    window.t('settings.images_col_image')+'</th><th>'+window.t('settings.images_col_local')+'</th><th>'+
+    window.t('settings.images_col_running')+'</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+  box.querySelectorAll('[data-build]').forEach(b => b.onclick = async () => {
+    if(!confirm(window.t('settings.images_build_confirm'))) return;
+    b.disabled = true;
+    try { await BT.fetchJSON('/api/deploy/images/'+encodeURIComponent(b.dataset.build)+'/build', {method:'POST'}); }
+    catch(e){ BT.toast(e.message,'error'); }
+    loadImages();
+  });
+  box.querySelectorAll('[data-migrate]').forEach(b => b.onclick = async () => {
+    if(!confirm(window.t('settings.images_migrate_confirm'))) return;
+    b.disabled = true;
+    try { await BT.fetchJSON('/api/tools/'+encodeURIComponent(b.dataset.migrate)+'/lifecycle', {body:{action:'migrate'}}); BT.toast(window.t('js.saved')); }
+    catch(e){ BT.toast(e.message,'error'); }
+    loadImages();
+  });
+  if(enCours) imgTimer = setTimeout(() => { if(depSub === 'images') loadImages(); }, 3000);
+}
+document.getElementById('img-pick').onclick = () => document.getElementById('img-file').click();
+document.getElementById('img-file').onchange = (e) => {
+  const f = e.target.files[0];
+  document.getElementById('img-name').textContent = f ? f.name+' ('+imgSize(f.size)+')' : '';
+  document.getElementById('img-import').disabled = !f;
+};
+document.getElementById('img-import').onclick = async () => {
+  const f = document.getElementById('img-file').files[0]; if(!f) return;
+  const btn = document.getElementById('img-import'), out = document.getElementById('img-status');
+  btn.disabled = true; out.textContent = '…';
+  try {
+    const fd = new FormData(); fd.append('file', f);
+    const r = await fetch('/api/deploy/images/import', {method:'POST', body:fd});
+    const j = await r.json().catch(() => ({}));
+    if(!r.ok) throw new Error(j.error || ('HTTP '+r.status));
+    out.innerHTML = (j.images||[]).map(i => '<div><code>'+BT.esc(i.image)+'</code> — '+
+      (i.conforme ? window.t('settings.images_import_match')
+                  : window.t('settings.images_import_mismatch')+' <code>'+BT.esc(i.attendue)+'</code>')+'</div>').join('');
+    loadImages();
+  } catch(e){ out.textContent = e.message; BT.toast(e.message,'error'); }
+  btn.disabled = false;
+};
+
+// ── Ember+ (service global) ───────────────────────────────────────────────────
+async function loadNetwork(){
+  const d = await BT.fetchJSON('/api/system/network');
+  const decl = {}; (d.declared||[]).forEach(x => decl[x.name] = x);
+  const seen = {}; (d.interfaces||[]).forEach(x => seen[x.name] = x);
+  const names = Array.from(new Set([...Object.keys(seen), ...Object.keys(decl)])).sort();
+  document.querySelector('#net-tbl tbody').innerHTML = names.map(n => {
+    const live = seen[n], dc = decl[n];
+    const addrs = live ? live.addresses.join(', ') : '—';
+    const da = dc ? (dc.address || dc.method) : '—';
+    // Une interface déclarée mais absente de l'état courant est un cas courant et
+    // déroutant : on le nomme au lieu de laisser une ligne vide.
+    const st = live ? window.t('settings.network_up')
+                    : (dc ? window.t('settings.network_declared_only') : '—');
+    return '<tr><td>'+BT.esc(n)+'</td><td>'+BT.esc(addrs)+'</td><td>'+BT.esc(da)+'</td><td>'+st+'</td></tr>';
+  }).join('');
+  const gw = d.gateway ? d.gateway.address + ' (' + d.gateway.interface + ')' : '—';
+  const dns = (d.dns && d.dns.servers.length) ? d.dns.servers.join(', ') : '—';
+  const search = (d.dns && d.dns.search.length) ? d.dns.search.join(', ') : '—';
+  document.querySelector('#net-sys tbody').innerHTML =
+      [[window.t('settings.network_hostname'), d.hostname || '—'],
+       [window.t('settings.network_gateway'), gw],
+       [window.t('settings.network_dns'), dns],
+       [window.t('settings.network_search'), search],
+       [window.t('settings.network_manager'), (d.manager||'—') + (d.virt ? ' · ' + d.virt : '')]]
+      .map(r => '<tr><td>'+BT.esc(r[0])+'</td><td>'+BT.esc(r[1])+'</td></tr>').join('');
+  const sel = document.getElementById('net-iface');
+  sel.innerHTML = (d.interfaces||[]).filter(x => x.name !== 'docker0')
+      .map(x => '<option value="'+BT.esc(x.name)+'">'+BT.esc(x.name)+'</option>').join('');
+  showPending(d.pending);
+  const owned = document.getElementById('net-owned');
+  owned.style.display = d.host_owned ? '' : 'none';
+  if (d.host_owned) owned.textContent = window.t('settings.network_host_owned');
+}
+let NET_TIMER = null;
+function showPending(p){
+  const box = document.getElementById('net-pending');
+  const apply = document.getElementById('net-apply');
+  if(NET_TIMER){ clearInterval(NET_TIMER); NET_TIMER = null; }
+  if(!p){ box.style.display = 'none'; apply.disabled = false; return; }
+  box.style.display = ''; apply.disabled = true;
+  box.dataset.token = p.token;
+  const tick = () => {
+    const left = Math.max(0, Math.round(p.deadline - Date.now()/1000));
+    // Le compte à rebours n'est pas décoratif : il dit combien de temps il reste pour
+    // confirmer AVANT que la machine ne revienne seule à son adresse précédente.
+    document.getElementById('net-countdown').textContent =
+        window.t('settings.network_pending').replace('{s}', left);
+    if(left <= 0){ clearInterval(NET_TIMER); NET_TIMER = null; loadNetwork(); }
+  };
+  tick(); NET_TIMER = setInterval(tick, 1000);
+}
+document.getElementById('net-apply').onclick = async () => {
+  const addr = document.getElementById('net-addr').value.trim();
+  if(!addr) return;
+  if(!confirm(window.t('settings.network_confirm_apply').replace('{a}', addr))) return;
+  try {
+    const r = await BT.fetchJSON('/api/system/network/change', { body: {
+      iface: document.getElementById('net-iface').value,
+      address: addr,
+      gateway: document.getElementById('net-gw').value.trim() || null,
+      persist: document.getElementById('net-persist').checked,
+    }});
+    BT.toast(window.t('settings.network_applied'));
+    showPending(r);
+  } catch(e){ BT.toast(e.message, 'error'); }
+};
+document.getElementById('net-confirm').onclick = async () => {
+  try {
+    await BT.fetchJSON('/api/system/network/confirm',
+        { body: { token: document.getElementById('net-pending').dataset.token } });
+    BT.toast(window.t('js.saved')); loadNetwork();
+  } catch(e){ BT.toast(e.message, 'error'); }
+};
+document.getElementById('net-cancel').onclick = async () => {
+  try { await BT.fetchJSON('/api/system/network/cancel', { body: {} });
+        BT.toast(window.t('js.saved')); loadNetwork(); }
+  catch(e){ BT.toast(e.message, 'error'); }
+};
+async function loadEmberplus(){
+  const d = await BT.fetchJSON('/api/emberplus/status');
+  document.getElementById('ep-enabled').checked = !!d.enabled_setting;
+  document.getElementById('ep-port').value = d.port_setting || 9000;
+  document.getElementById('ep-push').value = d.push_interval_setting || 5;
+  document.getElementById('ep-slots').value = d.slots_count_setting || 16;
+  document.getElementById('ep-lanes').value = d.lanes_per_slot_setting || 32;
+  document.getElementById('ep-ui-url').value = d.ui_url_setting || '';
+  document.getElementById('ep-tally-port').value = d.tally_port_setting || 0;
+  document.getElementById('ep-tally-roots').value = d.tally_roots_setting || '';
+  document.getElementById('ep-tally-excl').checked = !!d.tally_exclusive_setting;
+  document.getElementById('ep-eager').value = d.eager_paths_setting || '';
+  document.getElementById('ep-batch').value = d.dir_batch_setting || 0;
+  renderEmberStatus(d);
+  loadEmberProfile();
+}
+function renderEmberStatus(d){
+  const run = d.running ? (window.t('settings.emberplus_running')+' :'+d.port+' · '+(d.clients||0)+' client(s)')
+                        : window.t('settings.emberplus_stopped');
+  const err = d.last_error ? ' — '+BT.esc(d.last_error) : '';
+  document.getElementById('ep-status').innerHTML = BT.esc(run)+err;
+  const c = d.contributors || [];
+  // La RACINE est ce que le contrôleur voit, et elle est stable depuis 0.20.0 (§16) : elle
+  // vaut donc d'être lue ici plutôt que dans la base. 1000/1001/1100 sont les racines fixes
+  // (moule IPG, service, SDP) et ne se déplacent pas — d'où `movable`, décidé côté service.
+  document.getElementById('ep-contrib').innerHTML = c.length
+    ? '<thead><tr><th style="width:90px">'+window.t('settings.emberplus_root')+'</th>'
+      + '<th>'+window.t('settings.emberplus_contributors')+'</th></tr></thead><tbody>'
+      + c.map(x => '<tr><td>'
+                 + (x.movable
+                    ? '<input type="number" class="ep-root" data-type="'+BT.esc(x.type)+'"'
+                      + ' data-was="'+BT.esc(String(x.root))+'" min="1" max="999"'
+                      + ' value="'+BT.esc(String(x.root))+'" style="width:70px">'
+                    : (x.root != null ? BT.esc(String(x.root)) : '—'))
+                 + '</td><td>'+BT.esc(x.label)+' <span class="muted">('+BT.esc(x.type)+')</span></td></tr>').join('')
+      + '</tbody>'
+    : '';
+  // Déplacer une racine EST un acte d'exploitation : le sous-arbre bouge chez le contrôleur.
+  // On confirme donc, et on remet le champ à sa valeur d'avant si l'exploitant renonce ou si
+  // le service refuse (collision, numéro retiré).
+  document.querySelectorAll('#ep-contrib .ep-root').forEach(inp => inp.onchange = async () => {
+    const n = parseInt(inp.value), was = inp.dataset.was;
+    if (String(n) === was) return;
+    if (!confirm(window.t('settings.emberplus_root_confirm'))) { inp.value = was; return; }
+    try {
+      renderEmberStatus(await BT.fetchJSON('/api/emberplus/roots',
+                                           { body: { type: inp.dataset.type, root: n } }));
+      BT.toast(window.t('js.saved'));
+    } catch(e){ BT.toast(e.message, 'error'); inp.value = was; }
+  });
+}
+document.getElementById('ep-save').onclick = async () => {
+  try {
+    const d = await BT.fetchJSON('/api/emberplus/apply', { body: {
+      enabled: document.getElementById('ep-enabled').checked,
+      port: parseInt(document.getElementById('ep-port').value) || 9000,
+      push_interval: parseInt(document.getElementById('ep-push').value) || 5,
+      slots_count: parseInt(document.getElementById('ep-slots').value) || 16,
+      lanes_per_slot: parseInt(document.getElementById('ep-lanes').value) || 32,
+      ui_url: document.getElementById('ep-ui-url').value,
+      tally_port: parseInt(document.getElementById('ep-tally-port').value) || 0,
+      tally_roots: document.getElementById('ep-tally-roots').value,
+      tally_exclusive: document.getElementById('ep-tally-excl').checked,
+      eager_paths: document.getElementById('ep-eager').value,
+      dir_batch: parseInt(document.getElementById('ep-batch').value) || 0,
+    }});
+    BT.toast(window.t('js.saved')); renderEmberStatus(d);
+  } catch(e){ BT.toast(e.message,'error'); }
+};
+
+// ── Profil canonique Ember+ (« moule IPG ») : éditeur structuré ─────────────────
+// La numérotation (block.id / param.id) est la SOURCE DE VÉRITÉ des chemins VSM : on ne
+// renumérote JAMAIS ; ajouter = id = max+1 (jamais réutilisé), supprimer = avertissement.
+let emberProfile = null;
+async function loadEmberProfile(){
+  try { const d = await BT.fetchJSON('/api/emberplus/profile'); emberProfile = d.profile || {blocks:[]}; }
+  catch(e){ emberProfile = {blocks:[]}; }
+  document.getElementById('ep-prof-label').value = emberProfile.label || '';
+  renderEmberProfile();
+}
+function epNextId(arr){ return (arr||[]).reduce((m,x)=>Math.max(m, x.id||0), 0) + 1; }
+function epParamRow(bi, pi, pa){
+  const types = ['string','int','real','bool','enum'];
+  const topts = types.map(t=>`<option value="${t}"${(pa.type||'string')===t?' selected':''}>${t}</option>`).join('');
+  const enumCell = (pa.type==='enum')
+    ? `<input class="ep-p-enum" data-bi="${bi}" data-pi="${pi}" value="${BT.esc((pa.enum||[]).join(', '))}" placeholder="valeurs, séparées par des virgules">`
+    : '<span class="muted">—</span>';
+  return `<tr>
+    <td><input class="ep-p-label" data-bi="${bi}" data-pi="${pi}" value="${BT.esc(pa.label||'')}"></td>
+    <td><code>${BT.esc(pa.key||'')}</code> <span class="muted">id ${pa.id}</span></td>
+    <td><select class="ep-p-type" data-bi="${bi}" data-pi="${pi}">${topts}</select></td>
+    <td>${enumCell}</td>
+    <td><button class="btn btn-red ep-p-del" data-bi="${bi}" data-pi="${pi}" title="Supprimer ce paramètre">×</button></td>
+  </tr>`;
+}
+function renderEmberProfile(){
+  const host = document.getElementById('ep-prof'); if(!host) return;
+  const blocks = (emberProfile.blocks||[]);
+  host.innerHTML = blocks.length ? blocks.map((b, bi) => `
+    <div class="ep-block">
+      <div class="ep-block-h">
+        <input class="ep-b-label" data-bi="${bi}" value="${BT.esc(b.label||'')}" placeholder="Nom du bloc">
+        <code>${BT.esc(b.key||'')}</code> <span class="muted">id ${b.id}</span>
+        <span class="ep-spacer"></span>
+        <button class="btn ep-b-addparam" data-bi="${bi}" type="button">+ paramètre</button>
+        <button class="btn btn-red ep-b-del" data-bi="${bi}" type="button">Supprimer le bloc</button>
+      </div>
+      <table class="set-tbl ep-params"><tbody>${(b.params||[]).map((pa,pi)=>epParamRow(bi,pi,pa)).join('')}</tbody></table>
+    </div>`).join('') : '<div class="muted">Aucun bloc. « + bloc » pour commencer.</div>';
+  wireEmberProfile();
+}
+function wireEmberProfile(){
+  const P = emberProfile, host = document.getElementById('ep-prof');
+  host.querySelectorAll('.ep-b-label').forEach(el => el.oninput = () => { P.blocks[+el.dataset.bi].label = el.value; });
+  host.querySelectorAll('.ep-p-label').forEach(el => el.oninput = () => { P.blocks[+el.dataset.bi].params[+el.dataset.pi].label = el.value; });
+  host.querySelectorAll('.ep-p-enum').forEach(el => el.oninput = () => {
+    P.blocks[+el.dataset.bi].params[+el.dataset.pi].enum = el.value.split(',').map(s=>s.trim()).filter(Boolean);
+  });
+  host.querySelectorAll('.ep-p-type').forEach(el => el.onchange = () => {
+    const pa = P.blocks[+el.dataset.bi].params[+el.dataset.pi];
+    pa.type = el.value; if(pa.type==='enum' && !Array.isArray(pa.enum)) pa.enum = [];
+    renderEmberProfile();   // affiche/masque l'éditeur d'enum
+  });
+  host.querySelectorAll('.ep-p-del').forEach(el => el.onclick = () => {
+    const b = P.blocks[+el.dataset.bi], pa = b.params[+el.dataset.pi];
+    if(!confirm('Supprimer le paramètre « '+(pa.label||pa.key)+' » ?\nTout mapping VSM/outil pointant dessus sera cassé.')) return;
+    b.params.splice(+el.dataset.pi, 1); renderEmberProfile();
+  });
+  host.querySelectorAll('.ep-b-addparam').forEach(el => el.onclick = () => {
+    const b = P.blocks[+el.dataset.bi];
+    const key = (prompt('Clé du paramètre (identifiant stable, ex. delay) :')||'').trim(); if(!key) return;
+    const label = (prompt('Libellé :', key)||key).trim();
+    (b.params = b.params||[]).push({ key, label, id: epNextId(b.params), type: 'int' });
+    renderEmberProfile();
+  });
+  host.querySelectorAll('.ep-b-del').forEach(el => el.onclick = () => {
+    const b = P.blocks[+el.dataset.bi];
+    if(!confirm('Supprimer le bloc « '+(b.label||b.key)+' » et ses '+((b.params||[]).length)+' paramètre·s ?\nTout mapping VSM/outil pointant dessus sera cassé.')) return;
+    P.blocks.splice(+el.dataset.bi, 1); renderEmberProfile();
+  });
+}
+document.getElementById('ep-prof-addblock').onclick = () => {
+  if(!emberProfile){ BT.toast('Profil pas encore chargé','warning'); return; }
+  const key = (prompt('Clé du bloc (identifiant stable, ex. framesync) :')||'').trim(); if(!key) return;
+  const label = (prompt('Libellé du bloc :', key)||key).trim();
+  (emberProfile.blocks = emberProfile.blocks||[]).push({ key, label, id: epNextId(emberProfile.blocks), params: [] });
+  renderEmberProfile();
+};
+document.getElementById('ep-prof-reload').onclick = loadEmberProfile;
+document.getElementById('ep-prof-save').onclick = async () => {
+  if(!emberProfile){ BT.toast('Profil pas encore chargé','warning'); return; }
+  emberProfile.label = document.getElementById('ep-prof-label').value.trim() || 'Profil';
+  if(!(emberProfile.blocks||[]).length){ BT.toast('Le profil doit contenir au moins un bloc','error'); return; }
+  try { const d = await BT.fetchJSON('/api/emberplus/profile', { body: emberProfile });
+    emberProfile = d.profile || emberProfile; BT.toast(window.t('js.saved')); renderEmberProfile();
+  } catch(e){ BT.toast(e.message,'error'); }
+};
+document.getElementById('ep-prof-export').onclick = () => {
+  if(!emberProfile){ BT.toast('Profil pas encore chargé','warning'); return; }
+  const blob = new Blob([JSON.stringify(emberProfile, null, 2)], {type:'application/json'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = 'emberplus-profile.json'; a.click(); URL.revokeObjectURL(a.href);
+};
+document.getElementById('ep-prof-import-btn').onclick = () => document.getElementById('ep-prof-import').click();
+document.getElementById('ep-prof-import').onchange = async (ev) => {
+  const f = ev.target.files[0]; if(!f) return;
+  try { const p = JSON.parse(await f.text());
+    if(!p || !Array.isArray(p.blocks)) throw new Error('profil invalide');
+    emberProfile = p; document.getElementById('ep-prof-label').value = p.label||'';
+    renderEmberProfile(); BT.toast('Profil importé — pensez à Enregistrer');
+  } catch(e){ BT.toast('Import : '+e.message,'error'); }
+  ev.target.value = '';
+};
+
+// ── TSL (service global) : émission des libellés + tally d'état ────────────────
+// L'Ember+ n'envoie que des NUMÉROS (EMBERPLUS-IPG.md §12.9.1) ; ce service envoie les noms.
+// ⚠ Le plan d'index (écran + index) devient un contrat VSM aussi durable que les racines
+// Ember+ dès qu'un pupitre y est câblé : reprenable à la mise en service, gelé ensuite.
+function tslIds(){ return {
+  enabled:'tsl-enabled', transport:'tsl-transport', host:'tsl-host', port:'tsl-port',
+  interval:'tsl-interval', tally:'tsl-tally', offset:'tsl-offset', labelLen:'tsl-label-len',
+  laneFmt:'tsl-lane-fmt', sigFmt:'tsl-sig-fmt', brightness:'tsl-brightness',
+  unicode:'tsl-unicode', pack:'tsl-pack' }; }
+function tslEl(id){ return document.getElementById(id); }
+async function loadTsl(){
+  const d = await BT.fetchJSON('/api/tsl/status');
+  tslEl('tsl-enabled').checked   = !!d.enabled_setting;
+  tslEl('tsl-transport').value   = d.transport_setting || 'udp';
+  tslEl('tsl-host').value        = d.host_setting || '';
+  tslEl('tsl-port').value        = d.port_setting || '';
+  tslEl('tsl-interval').value    = d.interval_setting || 10;
+  tslEl('tsl-tally').checked     = !!d.tally_setting;
+  const lv = d.levels_setting || {};
+  tslEl('tsl-lv-slots').checked   = !!lv.slots;
+  tslEl('tsl-lv-lanes').checked   = !!lv.lanes;
+  tslEl('tsl-lv-signals').checked = !!lv.signals;
+  const sc = d.screens_setting || {};
+  tslEl('tsl-sc-slots').value   = sc.slots;
+  tslEl('tsl-sc-lanes').value   = sc.lanes;
+  tslEl('tsl-sc-inputs').value  = sc.inputs;
+  tslEl('tsl-sc-outputs').value = sc.outputs;
+  tslEl('tsl-offset').value      = d.index_offset_setting;
+  tslEl('tsl-label-len').value   = d.label_len_setting;
+  tslEl('tsl-lane-fmt').value    = d.lane_format_setting || '';
+  tslEl('tsl-sig-fmt').value     = d.signal_format_setting || '';
+  tslEl('tsl-brightness').value  = d.brightness_setting;
+  tslEl('tsl-plugin-label').checked = !!d.plugin_label_setting;
+  tslEl('tsl-unicode').checked   = !!d.unicode_setting;
+  tslEl('tsl-pack').checked      = !!d.pack_setting;
+  tslEl('tsl-overrides').value   = JSON.stringify(d.labels_setting || {}, null, 2);
+  renderTslStatus(d);
+}
+function renderTslStatus(d){
+  let s;
+  if(d.source_error) s = '✗ '+BT.esc(d.source_error);
+  else if(d.peer_reason) s = window.t('settings.tsl_no_peer')+' — '+BT.esc(d.peer_reason);
+  else if(d.running) s = window.t('settings.tsl_running')+' '+BT.esc(d.peer)+' ('+BT.esc((d.transport||'').toUpperCase())+')'
+                       + (d.last_sent ? ' · '+BT.esc(d.last_sent)+' · '+(d.frames||0)+' trames, '+(d.entries||0)+' afficheurs' : '');
+  else s = window.t('settings.tsl_stopped');
+  if(d.last_error) s += ' — '+BT.esc(d.last_error);
+  tslEl('tsl-status').innerHTML = s;
+}
+function tslBody(){
+  const b = {
+    enabled:   tslEl('tsl-enabled').checked,
+    transport: tslEl('tsl-transport').value,
+    host:      tslEl('tsl-host').value.trim(),
+    port:      parseInt(tslEl('tsl-port').value) || 0,
+    interval:  parseInt(tslEl('tsl-interval').value) || 10,
+    tally:     tslEl('tsl-tally').checked,
+    levels:    { slots: tslEl('tsl-lv-slots').checked, lanes: tslEl('tsl-lv-lanes').checked,
+                 signals: tslEl('tsl-lv-signals').checked },
+    screens:   { slots: parseInt(tslEl('tsl-sc-slots').value),
+                 lanes: parseInt(tslEl('tsl-sc-lanes').value),
+                 inputs: parseInt(tslEl('tsl-sc-inputs').value),
+                 outputs: parseInt(tslEl('tsl-sc-outputs').value) },
+    index_offset:  parseInt(tslEl('tsl-offset').value),
+    label_len:     parseInt(tslEl('tsl-label-len').value),
+    lane_format:   tslEl('tsl-lane-fmt').value,
+    signal_format: tslEl('tsl-sig-fmt').value,
+    brightness:    parseInt(tslEl('tsl-brightness').value),
+    plugin_label:  tslEl('tsl-plugin-label').checked,
+    unicode:       tslEl('tsl-unicode').checked,
+    pack:          tslEl('tsl-pack').checked,
+  };
+  const raw = tslEl('tsl-overrides').value.trim();
+  if(raw){ try { b.labels = JSON.parse(raw); } catch(e){ throw new Error(window.t('settings.tsl_overrides_bad')); } }
+  else b.labels = {};
+  return b;
+}
+async function saveTsl(){
+  try {
+    const d = await BT.fetchJSON('/api/tsl/apply', { body: tslBody() });
+    BT.toast(d.warning ? d.warning : window.t('js.saved'), d.warning ? 'error' : undefined);
+    renderTslStatus(d);
+  } catch(e){ BT.toast(e.message,'error'); }
+}
+tslEl('tsl-save').onclick = saveTsl;
+tslEl('tsl-save2').onclick = saveTsl;
+function tslLamps(e){
+  return ['left','text','right'].map(k => '<span class="tsl-lamp tsl-t'+(e[k]||0)+'"></span>').join('');
+}
+tslEl('tsl-prev-btn').onclick = async () => {
+  tslEl('tsl-prev-status').textContent = '…';
+  try {
+    const d = await BT.fetchJSON('/api/tsl/preview');
+    if(d.error){ tslEl('tsl-prev-status').textContent = '✗ '+d.error;
+                 tslEl('tsl-prev-frame').innerHTML = ''; tslEl('tsl-prev-tbl').innerHTML = ''; return; }
+    const c = d.counts || {};
+    tslEl('tsl-prev-status').textContent =
+      d.total+' '+window.t('settings.tsl_displays')+' · '+d.frames+' '+window.t('settings.tsl_frames')
+      +' · '+Object.keys(c).map(k => c[k]+' '+k).join(', ')
+      + (d.peer_reason ? ' · '+window.t('settings.tsl_no_peer') : '');
+    tslEl('tsl-prev-frame').innerHTML = d.sample
+      ? '<div class="muted" style="margin-bottom:6px">'+window.t('settings.tsl_frame_sample')+' — '+d.sample.size+' o</div>'
+        + '<table class="tsl-frame"><tbody>'
+        + d.sample.annotated.map(r => '<tr><td class="tsl-hx">'+BT.esc(r.hex)+'</td><td class="tsl-note">'+BT.esc(r.note)+'</td></tr>').join('')
+        + '</tbody></table>'
+      : '';
+    tslEl('tsl-prev-tbl').innerHTML =
+      '<thead><tr><th>'+window.t('settings.tsl_col_screen')+'</th><th>'+window.t('settings.tsl_col_index')
+      +'</th><th>'+window.t('settings.tsl_col_displayed')+'</th><th>'+window.t('settings.tsl_col_label')
+      +'</th><th>'+window.t('settings.tsl_col_tally')+'</th><th>'+window.t('settings.tsl_col_detail')+'</th></tr></thead><tbody>'
+      + (d.shown||[]).map(e => '<tr><td>'+e.screen+'</td><td><code>'+e.index+'</code></td><td class="muted">'+e.displayed
+        +'</td><td>'+BT.esc(e.label||'')+'</td><td>'+tslLamps(e)+'</td><td class="muted">'+BT.esc(e.detail||'')+'</td></tr>').join('')
+      + '</tbody>';
+  } catch(e){ tslEl('tsl-prev-status').textContent = '✗ '+e.message; }
+};
+tslEl('tsl-send-btn').onclick = async () => {
+  try {
+    const d = await BT.fetchJSON('/api/tsl/send', { body: {} });
+    BT.toast(window.t('settings.tsl_sent')+' '+(d.sent||0));
+    loadTsl();
+  } catch(e){ BT.toast(e.message,'error'); }
+};
+
+// ── SW-P-08 (service global) : nous sommes le ROUTEUR, le pupitre est le client ─
+// Le TSL ÉMET, celui-ci ÉCOUTE : le pupitre se connecte, demande les noms, on répond.
+// Matrice = étage de routage (entrées / sorties / affectation), niveau = essence.
+// ⚠ Deux réglages ont une portée bien plus large que leur case le laisse croire :
+// l'autorisation d'affectation (renumérotation du parc) et les bornes de grille
+// (des libellés déjà câblés au pupitre disparaissent). D'où les deux encarts.
+const SWP08_DEFAULTS = {
+  port: 0, label_chars: 12, matrix_in: 1, matrix_out: 2, extended: true,
+  allow_assign: true, push_names: true, dual_status: 2, test: true, test_matrix: 1,
+  sdi_per_slot: 40, ip_per_slot: 32,
+  signal_format: '{short} {kind}{n}', lane_format: '{short} V{lane}',
+  slot_format: 'IPG{slot} - {n}', unused_label: '.' };
+function swEl(id){ return document.getElementById(id); }
+function swNum(id, dflt){ const v = parseInt(swEl(id).value); return isNaN(v) ? dflt : v; }
+function swPick(v, dflt){ return (v === undefined || v === null) ? dflt : v; }
+async function loadSwp08(){
+  const d = await BT.fetchJSON('/api/swp08/status');
+  const D = SWP08_DEFAULTS, m = d.matrices_setting || {};
+  swEl('sw-enabled').checked      = !!d.enabled_setting;
+  swEl('sw-port').value           = d.port_setting || '';
+  swEl('sw-label-chars').value    = swPick(d.label_chars_setting, D.label_chars);
+  swEl('sw-extended').checked     = !!swPick(d.extended_setting, D.extended);
+  swEl('sw-matrix-in').value      = swPick(m.in, D.matrix_in);
+  swEl('sw-matrix-out').value     = swPick(m.out, D.matrix_out);
+  swEl('sw-allow-assign').checked = !!swPick(d.allow_assign_setting, D.allow_assign);
+  swEl('sw-push-names').checked   = !!swPick(d.push_names_setting, D.push_names);
+  swEl('sw-dual-status').value    = swPick(d.dual_status_setting, D.dual_status);
+  swEl('sw-test').checked         = !!swPick(d.test_setting, D.test);
+  swEl('sw-test-matrix').value    = swPick(d.test_matrix_setting, D.test_matrix);
+  swEl('sw-sdi').value            = swPick(d.sdi_per_slot_setting, D.sdi_per_slot);
+  swEl('sw-ip').value             = swPick(d.ip_per_slot_setting, D.ip_per_slot);
+  swEl('sw-sig-fmt').value        = swPick(d.signal_format_setting, D.signal_format);
+  swEl('sw-lane-fmt').value       = swPick(d.lane_format_setting, D.lane_format);
+  swEl('sw-slot-fmt').value       = swPick(d.slot_format_setting, D.slot_format);
+  swEl('sw-unused').value         = swPick(d.unused_label_setting, D.unused_label);
+  renderSwp08Status(d);
+  renderSwp08Levels(d);
+}
+function renderSwp08Status(d){
+  let s;
+  if(d.running) s = window.t('settings.swp08_running')+' '+(d.port||0)
+                  + ' · '+(d.clients||0)+' '+window.t('settings.swp08_clients')
+                  + ' · '+(d.requests||0)+' '+window.t('settings.swp08_requests')
+                  + ' · '+(d.labels_sent||0)+' '+window.t('settings.swp08_labels_sent');
+  else s = window.t('settings.swp08_stopped');
+  if(d.source_error) s += ' — ✗ '+BT.esc(d.source_error);
+  if(d.last_error) s += ' — '+BT.esc(d.last_error);
+  swEl('sw-status').innerHTML = s;
+}
+function renderSwp08Levels(d){
+  const lv = d.levels || [], c = d.counts || {};
+  swEl('sw-levels-tbl').innerHTML =
+    '<thead><tr><th>'+window.t('settings.swp08_col_level')+'</th><th>'+window.t('settings.swp08_col_layer_label')
+    +'</th><th>'+window.t('settings.swp08_col_sources')+'</th><th>'+window.t('settings.swp08_col_dests')
+    +'</th></tr></thead><tbody>'
+    + lv.map(e => '<tr><td><code>'+e.level+'</code></td><td>'+BT.esc(e.label||'')
+      +'</td><td>'+(c[e.stage+'/source'] || 0)+'</td><td>'+(c[e.stage+'/dest'] || 0)+'</td></tr>').join('')
+    + '</tbody>';
+  // Le sélecteur de prévisualisation suit le plan des layers, jamais une liste écrite en dur.
+  const sel = swEl('sw-prev-level'), cur = sel.value;
+  sel.innerHTML = lv.map(e => '<option value="'+e.level+'">'+e.level+' — '+BT.esc(e.label||'')+'</option>').join('');
+  if(cur) sel.value = cur;
+}
+function swp08Body(){
+  const D = SWP08_DEFAULTS;
+  return {
+    enabled:       swEl('sw-enabled').checked,
+    port:          swNum('sw-port', 0),
+    label_chars:   parseInt(swEl('sw-label-chars').value) || D.label_chars,
+    extended:      swEl('sw-extended').checked,
+    matrix_in:     swNum('sw-matrix-in', D.matrix_in),
+    matrix_out:    swNum('sw-matrix-out', D.matrix_out),
+    allow_assign:  swEl('sw-allow-assign').checked,
+    push_names:    swEl('sw-push-names').checked,
+    dual_status:   swNum('sw-dual-status', D.dual_status),
+    test:          swEl('sw-test').checked,
+    test_matrix:   swNum('sw-test-matrix', D.test_matrix),
+    sdi_per_slot:  swNum('sw-sdi', D.sdi_per_slot),
+    ip_per_slot:   swNum('sw-ip', D.ip_per_slot),
+    signal_format: swEl('sw-sig-fmt').value,
+    lane_format:   swEl('sw-lane-fmt').value,
+    slot_format:   swEl('sw-slot-fmt').value,
+    unused_label:  swEl('sw-unused').value,
+  };
+}
+async function saveSwp08(){
+  try {
+    await BT.fetchJSON('/api/swp08/apply', { body: swp08Body() });
+    BT.toast(window.t('js.saved'));
+    loadSwp08();
+  } catch(e){ BT.toast(e.message,'error'); }
+}
+document.querySelectorAll('.swp08-save').forEach(b => b.onclick = saveSwp08);
+// L'annotation arrive en TEXTE (« hexadécimal  commentaire », deux espaces au moins) :
+// on la remet en deux colonnes plutôt que d'imposer un format au service.
+function swp08Frame(txt){
+  return String(txt || '').split('\n').map(l => {
+    const m = l.match(/^(.*?)\s{2,}(.*)$/);
+    return m ? { hex: m[1], note: m[2] } : { hex: '', note: l };
+  });
+}
+if(swEl('sw-prev-btn')) swEl('sw-prev-btn').onclick = async () => {
+  swEl('sw-prev-status').textContent = '…';
+  swEl('sw-recv-wrap').innerHTML = '';
+  try {
+    const q = '?kind='+encodeURIComponent(swEl('sw-prev-kind').value)
+            + '&level='+encodeURIComponent(swEl('sw-prev-level').value || 1);
+    const d = await BT.fetchJSON('/api/swp08/preview'+q);
+    swEl('sw-prev-status').textContent =
+      d.labels+' '+window.t('settings.swp08_labels')+' · '+d.frames+' '+window.t('settings.swp08_frames')
+      + ' · '+window.t('settings.swp08_prev_matrix')+' '+d.matrix
+      + ' · '+window.t('settings.swp08_prev_stage')+' '+d.stage
+      + ' · '+d.label_chars+' '+window.t('settings.swp08_prev_chars')
+      + (d.extended ? ' · '+window.t('settings.swp08_prev_extended') : '');
+    swEl('sw-prev-frame').innerHTML = d.sample
+      ? '<div class="muted" style="margin-bottom:6px">'+window.t('settings.swp08_frame_sample')+' — '+d.sample.size+' o</div>'
+        + '<table class="tsl-frame"><tbody>'
+        + swp08Frame(d.sample.annotated).map(r => '<tr><td class="tsl-hx">'+BT.esc(r.hex)
+          +'</td><td class="tsl-note">'+BT.esc(r.note)+'</td></tr>').join('')
+        + '</tbody></table>'
+      : '';
+    swEl('sw-prev-tbl').innerHTML =
+      '<thead><tr><th>'+window.t('settings.swp08_col_number')+'</th><th>'
+      + window.t('settings.swp08_col_label')+'</th></tr></thead><tbody>'
+      + (d.preview||[]).map(e => '<tr><td><code>'+e.number+'</code></td><td>'+BT.esc(e.label||'')+'</td></tr>').join('')
+      + '</tbody>';
+  } catch(e){
+    swEl('sw-prev-status').textContent = '✗ '+e.message;
+    swEl('sw-prev-frame').innerHTML = ''; swEl('sw-prev-tbl').innerHTML = '';
+  }
+};
+// Les libellés que le PUPITRE nous a poussés : purement documentaire, mais c'est la seule
+// information qu'il donne sur son propre plan de nommage — donc le seul moyen de comparer.
+if(swEl('sw-recv-btn')) swEl('sw-recv-btn').onclick = async () => {
+  swEl('sw-recv-wrap').innerHTML = '…';
+  try {
+    const d = await BT.fetchJSON('/api/swp08/received');
+    const cles = Object.keys(d || {});
+    if(!cles.length){ swEl('sw-recv-wrap').innerHTML =
+      '<div class="muted">'+window.t('settings.swp08_received_none')+'</div>'; return; }
+    swEl('sw-recv-wrap').innerHTML =
+      '<div class="muted" style="margin-bottom:6px">'+window.t('settings.swp08_received_title')+'</div>'
+      + '<table class="set-tbl"><thead><tr><th>'+window.t('settings.swp08_col_key')+'</th><th>'
+      + window.t('settings.swp08_col_count')+'</th><th>'+window.t('settings.swp08_col_sample')
+      + '</th></tr></thead><tbody>'
+      + cles.map(k => {
+          const nums = Object.keys(d[k]).sort((a,b) => a-b);
+          const ex = nums.slice(0,8).map(n => n+' = '+d[k][n]).join(' · ');
+          return '<tr><td><code>'+BT.esc(k)+'</code></td><td>'+nums.length
+               + '</td><td class="muted">'+BT.esc(ex)+'</td></tr>';
+        }).join('')
+      + '</tbody></table>';
+  } catch(e){ swEl('sw-recv-wrap').innerHTML = '<div class="muted">✗ '+BT.esc(e.message)+'</div>'; }
+};
+
+// ── Mail (service global) ──────────────────────────────────────────────────────
+const MAIL_MASK = '••••••••';
+async function loadMail(){
+  const d = await BT.fetchJSON('/api/mail/status');
+  document.getElementById('mail-enabled').checked = !!d.enabled;
+  document.getElementById('mail-host').value = d.host || '';
+  document.getElementById('mail-port').value = d.port || 587;
+  document.getElementById('mail-security').value = d.security || 'starttls';
+  document.getElementById('mail-username').value = d.username || '';
+  document.getElementById('mail-from').value = d.from || '';
+  document.getElementById('mail-default-to').value = d.default_to || '';
+  // Secrets : afficher le masque si une valeur existe (le champ vide = inchangé).
+  document.getElementById('mail-password').value = d.password_set ? MAIL_MASK : '';
+  document.getElementById('mail-token').value = d.token_set ? MAIL_MASK : '';
+  renderMailStatus(d);
+}
+function renderMailStatus(d){
+  const l = d.last || {};
+  let s = '';
+  if(l.ok === true)  s = '✓ '+window.t('settings.mail_last_ok')+' '+BT.esc(l.detail||'');
+  else if(l.ok === false) s = '✗ '+window.t('settings.mail_last_fail')+' '+BT.esc(l.detail||'');
+  if(d.queue_depth) s += ' · '+d.queue_depth+' '+window.t('settings.mail_queued');
+  document.getElementById('mail-status').textContent = s;
+}
+document.getElementById('mail-save').onclick = async () => {
+  const body = {
+    enabled: document.getElementById('mail-enabled').checked,
+    host: document.getElementById('mail-host').value,
+    port: parseInt(document.getElementById('mail-port').value) || 587,
+    security: document.getElementById('mail-security').value,
+    username: document.getElementById('mail-username').value,
+    from: document.getElementById('mail-from').value,
+    default_to: document.getElementById('mail-default-to').value,
+  };
+  // N'envoyer les secrets que s'ils ont été modifiés (≠ masque).
+  const pwd = document.getElementById('mail-password').value;
+  if(pwd !== MAIL_MASK) body.password = pwd;
+  const tok = document.getElementById('mail-token').value;
+  if(tok !== MAIL_MASK) body.token = tok;
+  try {
+    const d = await BT.fetchJSON('/api/mail/apply', { body });
+    BT.toast(window.t('js.saved')); loadMail(); renderMailStatus(d);
+  } catch(e){ BT.toast(e.message,'error'); }
+};
+document.getElementById('mail-test-btn').onclick = async () => {
+  document.getElementById('mail-test-status').textContent = '…';
+  try {
+    const d = await BT.fetchJSON('/api/mail/test', { body: {
+      to: document.getElementById('mail-test-to').value,
+    }});
+    document.getElementById('mail-test-status').textContent =
+      '✓ '+window.t('settings.mail_test_ok')+' '+(d.to||[]).join(', ');
+    BT.toast(window.t('settings.mail_test_ok'));
+  } catch(e){
+    document.getElementById('mail-test-status').textContent = '✗ '+e.message;
+    BT.toast(e.message,'error');
+  }
+};
+
+// ── Notifications push (service ntfy) ──────────────────────────────────────────
+const NTFY_MASK = '••••••••';
+async function loadNtfy(){
+  const d = await BT.fetchJSON('/api/ntfy/status');
+  document.getElementById('ntfy-enabled').checked = !!d.enabled;
+  document.getElementById('ntfy-image').value = d.image || 'binwiederhier/ntfy:latest';
+  document.getElementById('ntfy-port').value = d.port || 2586;
+  document.getElementById('ntfy-bind').value = d.bind || '0.0.0.0';
+  document.getElementById('ntfy-base-url').value = d.base_url || '';
+  document.getElementById('ntfy-default-topic').value = d.default_topic || 'bobitools';
+  document.getElementById('ntfy-default-access').value = d.default_access || 'deny-all';
+  document.getElementById('ntfy-admin-user').value = d.admin_user || '';
+  document.getElementById('ntfy-admin-pass').value = d.admin_pass_set ? NTFY_MASK : '';
+  document.getElementById('ntfy-token').value = d.token_set ? NTFY_MASK : '';
+  renderNtfyStatus(d);
+}
+function renderNtfyStatus(d){
+  let s = [];
+  const st = d.container_state || 'absent';
+  s.push(window.t('settings.ntfy_server')+' : '+st + (d.container_state==='running' && d.base_url ? ' — '+BT.esc(d.base_url) : ''));
+  s.push(window.t('settings.ntfy_publish_token')+' : '+(d.publish_token_set ? '✓' : '—'));
+  const l = d.last || {};
+  if(l.ok === true)  s.push('✓ '+window.t('settings.ntfy_last_ok')+' '+BT.esc(l.detail||''));
+  else if(l.ok === false) s.push('✗ '+window.t('settings.ntfy_last_fail')+' '+BT.esc(l.detail||''));
+  if(d.queue_depth) s.push(d.queue_depth+' '+window.t('settings.mail_queued'));
+  if(d.apply_error) s.push('⚠ '+BT.esc(d.apply_error));
+  document.getElementById('ntfy-status').innerHTML = s.join('<br>');
+}
+document.getElementById('ntfy-save').onclick = async () => {
+  const body = {
+    enabled: document.getElementById('ntfy-enabled').checked,
+    image: document.getElementById('ntfy-image').value,
+    port: parseInt(document.getElementById('ntfy-port').value) || 2586,
+    bind: document.getElementById('ntfy-bind').value,
+    base_url: document.getElementById('ntfy-base-url').value,
+    default_topic: document.getElementById('ntfy-default-topic').value,
+    default_access: document.getElementById('ntfy-default-access').value,
+    admin_user: document.getElementById('ntfy-admin-user').value,
+  };
+  const pwd = document.getElementById('ntfy-admin-pass').value;
+  if(pwd !== NTFY_MASK) body.admin_pass = pwd;
+  const tok = document.getElementById('ntfy-token').value;
+  if(tok !== NTFY_MASK) body.token = tok;
+  document.getElementById('ntfy-status').textContent = '…';
+  try {
+    const d = await BT.fetchJSON('/api/ntfy/apply', { body });
+    BT.toast(window.t('js.saved')); loadNtfy(); renderNtfyStatus(d);
+  } catch(e){ BT.toast(e.message,'error'); }
+};
+document.getElementById('ntfy-token-btn').onclick = async () => {
+  try { const d = await BT.fetchJSON('/api/ntfy/token', { body: {} });
+    BT.toast(window.t('settings.ntfy_new_token')); renderNtfyStatus(d);
+  } catch(e){ BT.toast(e.message,'error'); }
+};
+document.getElementById('ntfy-test-btn').onclick = async () => {
+  document.getElementById('ntfy-test-status').textContent = '…';
+  try {
+    const d = await BT.fetchJSON('/api/ntfy/test', { body: {
+      topic: document.getElementById('ntfy-test-topic').value,
+      message: document.getElementById('ntfy-test-msg').value,
+    }});
+    document.getElementById('ntfy-test-status').textContent =
+      '✓ '+window.t('settings.ntfy_test_ok')+' '+BT.esc(d.topic||'');
+    BT.toast(window.t('settings.ntfy_test_ok'));
+  } catch(e){
+    document.getElementById('ntfy-test-status').textContent = '✗ '+e.message;
+    BT.toast(e.message,'error');
+  }
+};
+
+// ── Réglages exposés par les outils (config_schema des plugins) ───────────────
+const TOOL_SCHEMAS = {{ tool_config_schemas | tojson }};
+function tcField(t, f, val){
+  const id = 'tc-'+t+'-'+f.key;
+  const v = (val === undefined || val === null) ? (f.default !== undefined ? f.default : '') : val;
+  if(f.type === 'checkbox' || f.type === 'bool')
+    return '<input type="checkbox" class="ios-toggle" id="'+id+'"'+(v ? ' checked' : '')+'>';
+  if(f.type === 'select')
+    return '<select id="'+id+'">'+(f.options||[]).map(o =>
+      '<option value="'+BT.esc(o.value)+'"'+(String(o.value)===String(v)?' selected':'')+'>'+BT.esc(o.label||o.value)+'</option>').join('')+'</select>';
+  if(f.type === 'textarea')
+    return '<textarea id="'+id+'" rows="3">'+BT.esc(v)+'</textarea>';
+  const attrs = f.type === 'number'
+    ? ' type="number"'+(f.min!==undefined?' min="'+f.min+'"':'')+(f.max!==undefined?' max="'+f.max+'"':'')+(f.step!==undefined?' step="'+f.step+'"':'')
+    : ' type="text"';
+  return '<input id="'+id+'"'+attrs+' value="'+BT.esc(v)+'">';
+}
+async function loadToolCfg(){
+  SETTINGS = await BT.fetchJSON('/api/settings');
+  const host = document.getElementById('toolcfg-forms');
+  if(!host) return;
+  const types = Object.keys(TOOL_SCHEMAS);
+  if(!types.length){ host.innerHTML = '<div class="muted">'+BT.esc(window.t('settings.toolcfg_empty'))+'</div>'; return; }
+  host.innerHTML = types.map(t => {
+    const fields = (TOOL_SCHEMAS[t]||[]).map(f => {
+      const val = SETTINGS[t+'__'+f.key];
+      return '<div class="frow"><label for="tc-'+t+'-'+f.key+'">'+BT.esc(f.label||f.key)+'</label>'+tcField(t, f, val)+'</div>';
+    }).join('');
+    return '<div class="tc-tool" data-type="'+t+'" style="margin-bottom:18px">'
+      + '<h4 style="margin:0 0 8px">'+BT.esc(t)+'</h4>'+fields
+      + '<button class="btn btn-blue tc-save" data-type="'+t+'">'+BT.esc(window.t('settings.save'))+'</button></div>';
+  }).join('');
+  host.querySelectorAll('.tc-save').forEach(b => b.onclick = () => saveToolCfg(b.dataset.type));
+}
+async function saveToolCfg(t){
+  const body = {};
+  (TOOL_SCHEMAS[t]||[]).forEach(f => {
+    const el = document.getElementById('tc-'+t+'-'+f.key);
+    if(!el) return;
+    let v;
+    if(f.type === 'checkbox' || f.type === 'bool') v = el.checked;
+    else if(f.type === 'number') v = parseFloat(el.value);
+    else v = el.value;
+    body[t+'__'+f.key] = v;
+  });
+  try { await BT.fetchJSON('/api/settings', { body }); BT.toast(window.t('js.saved')); loadToolCfg(); }
+  catch(e){ BT.toast(e.message,'error'); }
+}
+
+{% endif %}
+{% if theme_only %}
+const LOADERS = { appearance: loadAppearance };
+{% else %}
+const LOADERS = { appearance: loadAppearance, users: loadUsers, plugins: loadPlugins,
+                  roles: loadRoles, rules: loadRules, controllers: loadControllers,
+                  toolcfg: loadToolCfg,
+                  services: loadServices, i18n: loadI18n, audit: loadAudit,
+                  backup: loadBackup, network: loadNetwork,
+                  deploy: loadDeploy, emberplus: loadEmberplus,
+                  tsl: loadTsl, swp08: loadSwp08, mail: loadMail, ntfy: loadNtfy };
+{% endif %}
+const h = (location.hash||'').replace(/^#/,'').split('/')[0];
+if(THEME_ONLY) loadAppearance();
+else switchSetTab(h && LOADERS[h] ? h : 'appearance');
+</script>
+{% endblock %}

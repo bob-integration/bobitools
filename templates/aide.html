@@ -1,0 +1,765 @@
+{% extends "layout.html" %}
+{% block title %}{{ _('nav.aide') }} — Bobi.Tools{% endblock %}
+
+{# Aide « wiki » : sidebar repliable par catégorie + recherche + rendu des help.md des
+   outils (agrégés par /api/plugins/help, rendus en HTML côté serveur). Mécanisme et shell
+   repris de Bobi.Studio, adaptés au layout en flux de Bobi.Tools (pas de header fixe). #}
+
+{% block head %}
+<style>
+/* ── Wiki shell ──────────────────────────────────────────────────────────── */
+/* body est en flex-column (topnav · contenu · footer) → le wiki occupe l'espace
+   restant via flex:1 (au lieu du calc(100vh - 52px) de Studio, qui supposait un
+   header fixe). */
+.wiki-root {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+/* ── Sidebar ─────────────────────────────────────────────────────────────── */
+.wiki-sidebar {
+  background: var(--bg-elev);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.wiki-search-wrap {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  position: relative;
+}
+
+.wiki-search {
+  width: 100%;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px 10px 6px 28px;
+  color: var(--text);
+  font-size: 0.83em;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 120ms;
+  box-sizing: border-box;
+}
+.wiki-search:focus { border-color: var(--accent); }
+.wiki-search::placeholder { color: var(--text-muted); }
+
+.wiki-search-icon {
+  position: absolute;
+  left: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  font-size: 0.85em;
+  pointer-events: none;
+}
+
+.wiki-search-kbd {
+  position: absolute;
+  right: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.68em;
+  color: var(--text-muted);
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-family: var(--font-mono);
+  pointer-events: none;
+  transition: opacity 120ms;
+}
+
+.wiki-nav {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0 16px;
+}
+.wiki-nav::-webkit-scrollbar { width: 4px; }
+.wiki-nav::-webkit-scrollbar-thumb { background: var(--border); border-radius: var(--radius-small); }
+
+/* En-tête de catégorie repliable */
+.wiki-cat { border-bottom: 1px solid var(--border-soft, var(--border)); }
+.wiki-cat:last-child { border-bottom: none; }
+
+.wiki-cat-hd {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 9px 14px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 0.7em;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  user-select: none;
+  text-align: left;
+  transition: color 100ms;
+}
+.wiki-cat-hd:hover { color: var(--text); }
+.wiki-cat-hd:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+.wiki-cat-chevron {
+  font-size: 0.9em;
+  transition: transform 160ms cubic-bezier(0.22, 1, 0.36, 1);
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+.wiki-cat.collapsed .wiki-cat-chevron { transform: rotate(-90deg); }
+
+.wiki-cat-count {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  font-weight: 400;
+  letter-spacing: 0;
+  opacity: 0.55;
+}
+
+.wiki-cat-items { padding-bottom: 4px; }
+.wiki-cat.collapsed .wiki-cat-items { display: none; }
+
+.wiki-nav-item {
+  display: block;
+  padding: 5px 14px 5px 28px;
+  font-size: 0.82em;
+  color: var(--text-muted);
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 80ms, color 80ms;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.wiki-nav-item:hover { background: var(--bg-hover); color: var(--text); }
+.wiki-nav-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.wiki-nav-item.active {
+  background: var(--bg-selected);
+  color: var(--accent);
+  font-weight: 500;
+}
+
+/* ── Content area ─────────────────────────────────────────────────────────── */
+.wiki-content { overflow-y: auto; background: var(--bg); }
+.wiki-content::-webkit-scrollbar { width: 6px; }
+.wiki-content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+/* Document = article (+ table des matières « Sur cette page » à droite quand l'article
+   a ≥ 2 titres, cf. buildToc). Padding porté par .wiki-doc pour englober la TOC. */
+.wiki-doc { padding: 32px 40px 60px; }
+.wiki-doc.has-toc {
+  display: grid;
+  grid-template-columns: minmax(0, 980px) 200px;
+  gap: 40px;
+}
+/* Conteneur large (tableaux d'ID, code, titres respirent) ; la PROSE reste plafonnée
+   à une largeur de lecture confortable (cf. p / li ci-dessous). */
+.wiki-article { max-width: 980px; }
+.wiki-doc.has-toc .wiki-article { max-width: none; }
+.wiki-doc:not(.has-toc) .wiki-toc { display: none; }   /* pas de landmark vide */
+
+/* ── Table des matières (sticky, colonne de droite) ── */
+.wiki-toc {
+  position: sticky;
+  top: 24px;
+  align-self: start;
+  max-height: calc(100vh - 140px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.wiki-toc-hd {
+  font-size: 0.72em;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding-bottom: 8px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+.wiki-toc-item {
+  display: block;
+  padding: 4px 8px;
+  font-size: 0.8em;
+  line-height: 1.4;
+  color: var(--text-muted);
+  text-decoration: none;
+  border-radius: var(--radius-small);
+  transition: color 80ms, background 80ms;
+}
+.wiki-toc-item.lvl-3 { padding-left: 20px; font-size: 0.76em; }
+.wiki-toc-item:hover { color: var(--text); }
+.wiki-toc-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+/* Section courante : couleur + fond (pas de lisière « side-stripe »). */
+.wiki-toc-item.active { color: var(--accent); background: var(--bg-selected); font-weight: 500; }
+
+.wiki-article-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+.wiki-article-cat {
+  font-size: 0.72em;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.wiki-article-ver {
+  font-family: var(--font-mono);
+  font-size: 0.72em;
+  color: var(--text-muted);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1px 6px;
+}
+
+.wiki-article h1 {
+  font-size: 1.35em;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-strong);
+  margin: 0 0 20px;
+  line-height: 1.25;
+}
+.wiki-article h2 {
+  font-size: 0.95em;
+  font-weight: 600;
+  color: var(--text-strong);
+  margin: 28px 0 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+.wiki-article h3 {
+  font-size: 0.88em;
+  font-weight: 600;
+  color: var(--text);
+  margin: 18px 0 8px;
+}
+.wiki-article p { margin: 0 0 12px; line-height: 1.6; font-size: 0.88em; color: var(--text); max-width: 72ch; }
+.wiki-article ul, .wiki-article ol { margin: 0 0 12px; padding-left: 22px; max-width: 72ch; }
+.wiki-article li { font-size: 0.88em; color: var(--text); margin-bottom: 4px; line-height: 1.5; }
+.wiki-article code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1px 5px;
+  color: var(--text-strong);
+}
+.wiki-article pre {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 12px 14px;
+  overflow-x: auto;
+  margin: 0 0 14px;
+  font-family: var(--font-mono);
+  font-size: 0.82em;
+  line-height: 1.5;
+  color: var(--text);
+}
+.wiki-article pre code { background: none; border: none; padding: 0; font-size: 1em; }
+.wiki-article table { border-collapse: collapse; margin: 0 0 14px; font-size: 0.85em; width: 100%; }
+.wiki-article th, .wiki-article td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+.wiki-article th { color: var(--text-muted); font-weight: 600; font-size: 0.88em; }
+.wiki-article strong { color: var(--text-strong); }
+.wiki-article a { color: var(--accent); text-decoration: none; }
+.wiki-article a:hover { text-decoration: underline; }
+/* Citation : fond teinté + bordure complète (PAS de lisière gauche « side-stripe »). */
+.wiki-article blockquote {
+  margin: 0 0 14px;
+  padding: 10px 14px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft, var(--border));
+  border-radius: var(--radius-small);
+  color: var(--text-muted);
+  font-size: 0.88em;
+}
+.wiki-article blockquote > :last-child { margin-bottom: 0; }
+
+/* ── Search results ───────────────────────────────────────────────────────── */
+.wiki-results { padding: 24px 32px; }
+.wiki-results-hd {
+  font-size: 0.78em;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+}
+.wiki-result-item {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  margin-bottom: 6px;
+  cursor: pointer;
+  background: var(--bg-elev);
+  transition: border-color 100ms, background 100ms;
+}
+.wiki-result-item:hover { border-color: var(--accent); background: var(--bg-selected); }
+.wiki-result-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.wiki-result-title { font-size: 0.88em; font-weight: 600; color: var(--text-strong); margin-bottom: 3px; }
+.wiki-result-cat {
+  font-size: 0.72em;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 5px;
+}
+.wiki-result-snippet { font-size: 0.8em; color: var(--text-muted); line-height: 1.5; }
+.wiki-result-snippet mark {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-radius: var(--radius-small);
+  padding: 0 2px;
+}
+.wiki-no-results { padding: 32px; text-align: center; color: var(--text-muted); font-size: 0.85em; }
+.wiki-loading { padding: 40px 32px; color: var(--text-muted); font-size: 0.85em; }
+
+/* Scrollbars amincies aussi hors WebKit (Firefox). */
+.wiki-nav, .wiki-content { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+
+/* ── Responsive : sous 640px, la sidebar passe AU-DESSUS du contenu (repli
+   structurel : recherche + nav scrollable en haut, article en dessous). ── */
+/* Pas la place pour 2 colonnes → la TOC se replie, l'article reprend toute la largeur. */
+@media (max-width: 1024px) {
+  .wiki-doc.has-toc { display: block; }
+  .wiki-doc.has-toc .wiki-article { max-width: 980px; }
+  .wiki-toc { display: none; }
+}
+
+@media (max-width: 640px) {
+  .wiki-root { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+  .wiki-sidebar { border-right: none; border-bottom: 1px solid var(--border); }
+  .wiki-nav { max-height: 30vh; }
+  .wiki-doc { padding: 22px 18px 44px; }
+  .wiki-results { padding: 18px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wiki-search, .wiki-cat-hd, .wiki-cat-chevron, .wiki-nav-item,
+  .wiki-result-item, .wiki-search-kbd, .wiki-toc-item { transition: none; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="wiki-root" id="wiki-root">
+
+  <aside class="wiki-sidebar">
+    <div class="wiki-search-wrap">
+      <span class="wiki-search-icon" aria-hidden="true">⌕</span>
+      <input class="wiki-search" id="wiki-search" type="search"
+             placeholder="{{ _('aide.search_placeholder') }}" autocomplete="off" spellcheck="false"
+             aria-label="{{ _('aide.search_placeholder') }}">
+      <span class="wiki-search-kbd" id="wiki-search-kbd">/</span>
+    </div>
+    <nav class="wiki-nav" id="wiki-nav" aria-label="{{ _('nav.aide') }}"></nav>
+  </aside>
+
+  <main class="wiki-content" id="wiki-content" aria-live="polite">
+    <div class="wiki-loading">{{ _('aide.loading') }}</div>
+  </main>
+
+</div>
+
+{# ── Articles « plateforme » (cœur) — templates inertes rendus par Jinja (i18n) ── #}
+<template id="wiki-art-presentation">
+<p>{{ _('aide.intro') }}</p>
+<h2>{{ _('aide.concept_title') }}</h2>
+<p>{{ _('aide.concept_body') }}</p>
+<ul>
+  <li><strong>inprocess</strong> — {{ _('aide.runtime_inprocess') }}</li>
+  <li><strong>docker</strong> — {{ _('aide.runtime_docker') }}</li>
+</ul>
+</template>
+
+<template id="wiki-art-utiliser">
+<ul>
+  <li>{{ _('aide.use_launcher') }}</li>
+  <li>{{ _('aide.use_focus') }} <code>/t/&lt;outil&gt;</code></li>
+  <li>{{ _('aide.use_test') }}</li>
+</ul>
+</template>
+
+{% if has_perm('tools.manage') %}
+<template id="wiki-art-administration">
+<ul>
+  <li>{{ _('aide.admin_install') }}</li>
+  <li>{{ _('aide.admin_access') }}</li>
+  <li>{{ _('aide.admin_audit') }}</li>
+</ul>
+</template>
+{% endif %}
+
+{# Droits d'accès : rôles, permissions des outils, périmètres (Réserver / Autoriser
+   seulement), contrôleurs. Contenu riche (listes, exemples) → clés i18n rendues |safe :
+   ce sont nos propres textes, pas une saisie. #}
+<template id="wiki-art-droits">
+<p>{{ _('aide.rights_intro')|safe }}</p>
+<h2>{{ _('aide.rights_levels_title') }}</h2>
+<ul>
+  <li>{{ _('aide.rights_level_roles')|safe }}</li>
+  <li>{{ _('aide.rights_level_perms')|safe }}</li>
+  <li>{{ _('aide.rights_level_scopes')|safe }}</li>
+</ul>
+<h2>{{ _('aide.rights_reserve_title') }}</h2>
+<p>{{ _('aide.rights_reserve_body')|safe }}</p>
+{{ _('aide.rights_reserve_example')|safe }}
+<p>{{ _('aide.rights_reserve_doubt')|safe }}</p>
+<h2>{{ _('aide.rights_allow_title') }}</h2>
+<p>{{ _('aide.rights_allow_body')|safe }}</p>
+{{ _('aide.rights_allow_example')|safe }}
+<h2>{{ _('aide.rights_deny_title') }}</h2>
+<p>{{ _('aide.rights_deny_body')|safe }}</p>
+{{ _('aide.rights_deny_example')|safe }}
+<h2>{{ _('aide.rights_both_title') }}</h2>
+<p>{{ _('aide.rights_both_body')|safe }}</p>
+<h2>{{ _('aide.rights_ctl_title') }}</h2>
+<p>{{ _('aide.rights_ctl_body')|safe }}</p>
+<h2>{{ _('aide.rights_tips_title') }}</h2>
+{{ _('aide.rights_tips')|safe }}
+</template>
+
+<template id="wiki-art-creer-outil">
+<p>{{ _('aide.author_body') }}</p>
+<pre>plugins/&lt;outil&gt;/
+  plugin.json     # type, label, version, runtime, nav, ui{page_html,page_js,page_css}
+  page.html       # fragment UI
+  page.js         # window.BTTools["&lt;type&gt;"] = { mount(el, ctx), unmount() }
+  page.css        # optionnel
+  backend.py      # optionnel (inprocess) : def api(path, method, payload, ctx)
+  Dockerfile      # optionnel (docker)
+  help.md         # documentation affichée ici</pre>
+</template>
+
+<template id="wiki-art-mail">
+<p>{{ _('aide.mail_intro') }}</p>
+<h2>{{ _('aide.mail_send_title') }}</h2>
+<p>{{ _('aide.mail_send_inprocess') }}</p>
+<pre>ctx.send_mail("Alerte", "Lien X down", to="noc@example.org")
+# sans 'to' → destinataires d'alerte par défaut</pre>
+<p>{{ _('aide.mail_send_docker') }}</p>
+<pre>POST /api/mail/send
+X-BT-Mail-Token: &lt;token&gt;
+{ "subject": "Alerte", "body": "Lien X down", "to": "noc@example.org" }</pre>
+<p>{{ _('aide.mail_send_async') }}</p>
+<h2>{{ _('aide.mail_config_title') }}</h2>
+<p>{{ _('aide.mail_config_body') }}</p>
+</template>
+
+<template id="wiki-art-ntfy">
+<p>{{ _('aide.ntfy_intro') }}</p>
+<h2>{{ _('aide.ntfy_send_title') }}</h2>
+<p>{{ _('aide.ntfy_send_inprocess') }}</p>
+<pre>ctx.notify("Lien X down", title="Alerte", priority="high", tags="warning")
+# sans 'topic' → topic par défaut</pre>
+<p>{{ _('aide.ntfy_send_docker') }}</p>
+<pre>POST /api/ntfy/publish
+X-BT-Ntfy-Token: &lt;token&gt;
+{ "message": "Lien X down", "title": "Alerte", "priority": "high", "tags": "warning" }</pre>
+<p>{{ _('aide.ntfy_send_async') }}</p>
+<h2>{{ _('aide.ntfy_subscribe_title') }}</h2>
+<p>{{ _('aide.ntfy_subscribe_body') }}</p>
+<h2>{{ _('aide.ntfy_config_title') }}</h2>
+<p>{{ _('aide.ntfy_config_body') }}</p>
+<h2>{{ _('aide.ntfy_license_title') }}</h2>
+<p>{{ _('aide.ntfy_license_body') }}</p>
+</template>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+
+// Libellés i18n (résolus côté serveur) ─────────────────────────────────────
+const L = {
+  cat_platform: {{ _('aide.cat_platform')|tojson }},
+  no_results:   {{ _('aide.no_results')|tojson }},
+  results_word: {{ _('aide.results_word')|tojson }},
+  on_this_page: {{ _('aide.on_this_page')|tojson }},
+};
+// Libellés des catégories d'outils = sections de nav contribuées par les outils.
+const SECTION_LABELS = {
+  {% for sec_id, sec in (plugin_sections or {}).items() %}{{ sec_id|tojson }}: {{ sec.label|tojson }},
+  {% endfor %}
+};
+
+// Articles « plateforme » (cœur). L'admin n'apparaît que si le template existe. ──
+const CORE_ARTICLES = [
+  { id: 'presentation',  title: {{ _('aide.art_overview')|tojson }}, cat: 'plateforme' },
+  { id: 'utiliser',      title: {{ _('aide.use_title')|tojson }},    cat: 'plateforme' },
+  {% if has_perm('tools.manage') %}{ id: 'administration', title: {{ _('aide.admin_title')|tojson }}, cat: 'plateforme' },{% endif %}
+  { id: 'droits',        title: {{ _('aide.rights_title')|tojson }}, cat: 'plateforme' },
+  { id: 'creer-outil',   title: {{ _('aide.author_title')|tojson }}, cat: 'plateforme' },
+  { id: 'mail',          title: {{ _('aide.mail_title')|tojson }},   cat: 'plateforme' },
+  { id: 'ntfy',          title: {{ _('aide.ntfy_title')|tojson }},   cat: 'plateforme' },
+];
+
+// Ordre d'affichage des catégories : plateforme d'abord, puis les sections d'outils.
+const CAT_ORDER = ['plateforme'{% for sec_id in (plugin_sections or {}).keys() %}, {{ sec_id|tojson }}{% endfor %}];
+
+// ── State ──────────────────────────────────────────────────────────────────
+let allArticles  = [...CORE_ARTICLES];
+let searchIndex  = [];
+let currentId    = null;
+let history_     = [];
+let collapsedCats = new Set();
+let tocObserver = null;             // scroll-spy de la table des matières
+
+// ── DOM refs ───────────────────────────────────────────────────────────────
+const navEl     = document.getElementById('wiki-nav');
+const contentEl = document.getElementById('wiki-content');
+const searchEl  = document.getElementById('wiki-search');
+const kbdEl     = document.getElementById('wiki-search-kbd');
+
+// ── Utilitaires ────────────────────────────────────────────────────────────
+function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function stripHtml(html){ const d = document.createElement('div'); d.innerHTML = html; return d.textContent || ''; }
+function catLabel(catId){ return catId === 'plateforme' ? L.cat_platform : (SECTION_LABELS[catId] || catId); }
+
+// ── Charger les articles des outils (help.md) ──────────────────────────────
+async function loadPluginArticles(){
+  try {
+    const r = await fetch('/api/plugins/help');
+    if (r.ok) {
+      const plugins = await r.json();
+      for (const p of plugins) {
+        allArticles.push({
+          id: 'plugin-' + p.type, title: p.label, cat: p.category || 'autres',
+          version: p.version, html: p.html, isPlugin: true,
+        });
+      }
+    }
+  } catch(e) {}
+  buildIndex();
+  renderNav();
+  const hash = location.hash.slice(1);
+  if (hash && allArticles.find(a => a.id === hash)) navigate(hash, false);
+}
+
+// ── Index de recherche ─────────────────────────────────────────────────────
+function buildIndex(){
+  searchIndex = allArticles.map(a => {
+    const raw = a.html ? stripHtml(a.html)
+                       : stripHtml((document.getElementById('wiki-art-' + a.id)||{}).innerHTML || '');
+    return { id: a.id, title: a.title, cat: a.cat, catLabel: catLabel(a.cat), text: raw };
+  });
+}
+
+// ── Rendu de la sidebar ────────────────────────────────────────────────────
+function renderNav(){
+  const bycat = {};
+  for (const a of allArticles) { (bycat[a.cat] = bycat[a.cat] || []).push(a); }
+  const keys = [...new Set([...CAT_ORDER, ...Object.keys(bycat)])].filter(k => bycat[k]);
+  const activeCat = (allArticles.find(a => a.id === currentId) || {}).cat;
+  let html = '';
+  for (const k of keys) {
+    const collapsed = collapsedCats.has(k) && k !== activeCat;
+    const items = bycat[k];
+    html += `<div class="wiki-cat${collapsed ? ' collapsed' : ''}" data-cat="${esc(k)}">
+      <button class="wiki-cat-hd" data-cat-toggle="${esc(k)}" aria-expanded="${collapsed ? 'false' : 'true'}">
+        <span class="wiki-cat-chevron" aria-hidden="true">▾</span>
+        <span>${esc(catLabel(k))}</span>
+        <span class="wiki-cat-count">${items.length}</span>
+      </button>
+      <div class="wiki-cat-items">`;
+    for (const a of items) {
+      html += `<a class="wiki-nav-item${a.id === currentId ? ' active' : ''}"
+                  data-id="${esc(a.id)}" role="button" tabindex="0"
+                  title="${esc(a.title)}">${esc(a.title)}</a>`;
+    }
+    html += `</div></div>`;
+  }
+  navEl.innerHTML = html;
+  navEl.querySelectorAll('.wiki-nav-item').forEach(el => {
+    el.addEventListener('click', () => navigate(el.dataset.id));
+    el.addEventListener('keydown', e => { if(e.key==='Enter'||e.key===' ') navigate(el.dataset.id); });
+  });
+  navEl.querySelectorAll('[data-cat-toggle]').forEach(btn => {
+    btn.addEventListener('click', () => toggleCat(btn.dataset.catToggle));
+  });
+}
+
+function toggleCat(catId){
+  if (collapsedCats.has(catId)) collapsedCats.delete(catId); else collapsedCats.add(catId);
+  const catEl = navEl.querySelector(`.wiki-cat[data-cat="${catId}"]`);
+  if (catEl) {
+    const collapsed = collapsedCats.has(catId);
+    catEl.classList.toggle('collapsed', collapsed);
+    const btn = catEl.querySelector('.wiki-cat-hd');
+    if (btn) btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+  }
+}
+
+// ── Navigation ─────────────────────────────────────────────────────────────
+function navigate(id, pushState = true){
+  const art = allArticles.find(a => a.id === id);
+  if (!art) return;
+  if (pushState && currentId && currentId !== id) history_.push(currentId);
+  currentId = id;
+  location.hash = id;
+  renderArticle(art);
+  collapsedCats.delete(art.cat);
+  renderNav();
+  const active = navEl.querySelector('.wiki-nav-item.active');
+  if (active) active.scrollIntoView({ block: 'nearest' });
+  contentEl.scrollTop = 0;
+}
+
+function renderArticle(art){
+  let body;
+  if (art.html) { body = art.html; }
+  else { const tpl = document.getElementById('wiki-art-' + art.id); body = tpl ? tpl.innerHTML : '<p>—</p>'; }
+  const verBadge = art.version ? `<span class="wiki-article-ver">v${esc(art.version)}</span>` : '';
+  contentEl.innerHTML = `<div class="wiki-doc" id="wiki-doc">
+    <article class="wiki-article">
+      <div class="wiki-article-meta">
+        <span class="wiki-article-cat">${esc(catLabel(art.cat))}</span>
+        ${verBadge}
+      </div>
+      <h1>${esc(art.title)}</h1>
+      ${body}
+    </article>
+    <nav class="wiki-toc" id="wiki-toc" aria-label="${esc(L.on_this_page)}"></nav>
+  </div>`;
+  buildToc();
+}
+
+// ── Table des matières « Sur cette page » ───────────────────────────────────
+// Affichée seulement si l'article a ≥ 2 titres (h2/h3). Clic = saut au titre ;
+// la section visible est surlignée au défilement (scroll-spy via IntersectionObserver).
+function slugify(s){
+  return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'') || 'sec';
+}
+function buildToc(){
+  if (tocObserver) { tocObserver.disconnect(); tocObserver = null; }
+  const doc = document.getElementById('wiki-doc');
+  const tocEl = document.getElementById('wiki-toc');
+  const article = doc && doc.querySelector('.wiki-article');
+  if (!doc || !tocEl || !article) return;
+  const heads = [...article.querySelectorAll('h2, h3')];
+  if (heads.length < 2) { doc.classList.remove('has-toc'); tocEl.innerHTML = ''; return; }
+  const used = new Set();
+  for (const h of heads) {
+    let id = h.id || slugify(h.textContent);
+    while (used.has(id)) id += '-x';
+    used.add(id); h.id = id;
+  }
+  tocEl.innerHTML = `<div class="wiki-toc-hd">${esc(L.on_this_page)}</div>` +
+    heads.map(h => `<a class="wiki-toc-item lvl-${h.tagName === 'H3' ? 3 : 2}"
+                       href="#" data-tid="${esc(h.id)}">${esc(h.textContent)}</a>`).join('');
+  doc.classList.add('has-toc');
+  const smooth = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const byId = {};
+  tocEl.querySelectorAll('.wiki-toc-item').forEach(a => {
+    byId[a.dataset.tid] = a;
+    a.addEventListener('click', e => {
+      e.preventDefault();
+      const t = article.querySelector('#' + CSS.escape(a.dataset.tid));
+      if (t) t.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'start' });
+    });
+  });
+  // Surlignage de la section courante (titre dans le tiers haut de la zone de lecture).
+  tocObserver = new IntersectionObserver(entries => {
+    for (const en of entries) {
+      if (!en.isIntersecting) continue;
+      tocEl.querySelectorAll('.wiki-toc-item.active').forEach(x => x.classList.remove('active'));
+      const a = byId[en.target.id];
+      if (a) { a.classList.add('active'); a.scrollIntoView({ block: 'nearest' }); }
+    }
+  }, { root: contentEl, rootMargin: '0px 0px -70% 0px', threshold: 0 });
+  heads.forEach(h => tocObserver.observe(h));
+}
+
+// ── Recherche ──────────────────────────────────────────────────────────────
+function search(q){
+  q = q.trim();
+  if (!q) {
+    if (currentId) renderArticle(allArticles.find(a=>a.id===currentId)||allArticles[0]);
+    else navigate(allArticles[0].id, false);
+    return;
+  }
+  const terms = q.toLowerCase().split(/\s+/).filter(Boolean);
+  const scored = searchIndex.map(a => {
+    const titleL = a.title.toLowerCase(), textL = a.text.toLowerCase();
+    let score = 0;
+    for (const t of terms) { if (titleL.includes(t)) score += 10; if (textL.includes(t)) score += 1; }
+    return { ...a, score };
+  }).filter(a => a.score > 0).sort((a,b) => b.score - a.score);
+
+  if (!scored.length) {
+    contentEl.innerHTML = `<div class="wiki-no-results">${esc(L.no_results)} « ${esc(q)} »</div>`;
+    return;
+  }
+  function snippet(text, query, len=160){
+    const tl = text.toLowerCase(), ql = query.toLowerCase().split(/\s+/)[0];
+    const idx = tl.indexOf(ql), start = Math.max(0, idx - 60);
+    const raw = text.slice(start, start+len).replace(/\s+/g,' ');
+    return esc(raw).replace(new RegExp('(' + ql.replace(/[.*+?^${}()|[\]\\]/g,'\\$&') + ')', 'gi'), '<mark>$1</mark>');
+  }
+  const items = scored.slice(0,20).map(a =>
+    `<div class="wiki-result-item" data-id="${esc(a.id)}" role="button" tabindex="0">
+      <div class="wiki-result-title">${esc(a.title)}</div>
+      <div class="wiki-result-cat">${esc(a.catLabel)}</div>
+      <div class="wiki-result-snippet">${snippet(a.text, q)}</div>
+    </div>`).join('');
+  contentEl.innerHTML = `<div class="wiki-results">
+    <div class="wiki-results-hd">${scored.length} ${esc(L.results_word)} « ${esc(q)} »</div>
+    ${items}
+  </div>`;
+  const openResult = el => { searchEl.value = ''; kbdEl.style.opacity = '1'; navigate(el.dataset.id); };
+  contentEl.querySelectorAll('.wiki-result-item').forEach(el => {
+    el.addEventListener('click', () => openResult(el));
+    el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openResult(el); } });
+  });
+}
+
+// ── Raccourcis clavier ─────────────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (e.key === '/' && document.activeElement !== searchEl) { e.preventDefault(); searchEl.focus(); searchEl.select(); }
+  if (e.key === 'Escape' && document.activeElement === searchEl) { searchEl.value = ''; search(''); searchEl.blur(); kbdEl.style.opacity = '1'; }
+  if (e.key === 'ArrowLeft' && (e.altKey || e.metaKey)) { if (history_.length) navigate(history_.pop(), false); }
+});
+searchEl.addEventListener('input', () => { kbdEl.style.opacity = searchEl.value ? '0' : '1'; search(searchEl.value); });
+searchEl.addEventListener('focus', () => { kbdEl.style.opacity = '0'; });
+searchEl.addEventListener('blur',  () => { if (!searchEl.value) kbdEl.style.opacity = '1'; });
+
+// ── Init ───────────────────────────────────────────────────────────────────
+buildIndex();
+renderNav();
+const startId = location.hash.slice(1) || 'presentation';
+navigate((allArticles.find(a => a.id === startId) || allArticles[0]).id, false);
+loadPluginArticles();
+window.addEventListener('hashchange', () => {
+  const id = location.hash.slice(1);
+  if (id && id !== currentId) navigate(id, false);
+});
+
+})();
+</script>
+{% endblock %}
