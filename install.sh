@@ -47,7 +47,11 @@ fi
 # ── 4. Service systemd ────────────────────────────────────────────────────────
 SERVICE_SRC="bobitools.service"
 SERVICE_DST="/etc/systemd/system/bobitools.service"
-if [ -w /etc/systemd/system ] || [ "$(id -u)" = "0" ]; then
+if ! command -v systemctl &>/dev/null || [ ! -d /run/systemd/system ]; then
+    # Conteneur, certains LXC : systemd absent ou pas en PID 1. `systemctl daemon-reload` y
+    # échouerait, et `set -e` arrêterait l'installation à la dernière étape.
+    echo "⚠  systemd absent : service non installé (démarrer avec ./venv/bin/python main.py)."
+elif [ -w /etc/systemd/system ] || [ "$(id -u)" = "0" ]; then
     cp "$SERVICE_SRC" "$SERVICE_DST"
     systemctl daemon-reload
     systemctl enable bobitools

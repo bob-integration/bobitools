@@ -22,6 +22,19 @@ où tourne la logique.
 
 ## Démarrage
 
+**En une ligne**, sur une Debian ou une Ubuntu vierge (en root) :
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/bob-integration/bobitools/main/get.sh)
+```
+
+Le script installe ce qui manque (git, python3-venv, et Docker si vous l'acceptez), clone
+Bobi.Tools avec ses plugins dans `/opt/bobitools`, installe et démarre le service, puis indique
+l'adresse de l'assistant de premier accès. Options : `--dir`, `--ref`, `--docker` / `--no-docker`,
+`-y` (cf. `get.sh --help`).
+
+**À la main** :
+
 Chaque plugin et chaque service est un **dépôt séparé**, agrégé ici en **submodule git**
 (cf. `.gitmodules`) — comme Bobi.Studio. Cloner **avec les submodules** :
 
