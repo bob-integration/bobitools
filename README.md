@@ -28,10 +28,16 @@ où tourne la logique.
 bash <(curl -fsSL https://raw.githubusercontent.com/bob-integration/bobitools/main/get.sh)
 ```
 
-Le script installe ce qui manque (git, python3-venv, et Docker si vous l'acceptez), clone
-Bobi.Tools avec ses plugins dans `/opt/bobitools`, installe et démarre le service, puis indique
-l'adresse de l'assistant de premier accès. Options : `--dir`, `--ref`, `--docker` / `--no-docker`,
+Le script installe ce qui manque (git, python3-venv, et Docker si vous l'acceptez), clone le
+cœur de Bobi.Tools dans `/opt/bobitools`, installe les **outils** de votre choix (tous, aucun ou
+une liste), démarre le service, puis indique l'adresse de l'assistant de premier accès.
+Options : `--dir`, `--ref`, `--outils tous|aucun|switch_ports,notes`, `--docker` / `--no-docker`,
 `-y` (cf. `get.sh --help`).
+
+**Ajouter ou mettre à jour un outil** : Réglages → Outils → **Catalogue**. Il liste les outils et
+services publiés sur GitHub (dépôts `bobitools-plugin-*` et `bobitools-service-*`), avec leur
+version, leurs nouveautés et leurs dépendances. En ligne de commande :
+`./venv/bin/python tools/catalogue.py liste | installe <outil…|tous>`.
 
 **À la main** :
 

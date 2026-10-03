@@ -33,6 +33,25 @@ table.set-tbl { width: 100%; border-collapse: collapse; font-size: 0.9em; }
 #groups-tbl td { vertical-align: top; }
 #groups-tbl summary { cursor: pointer; }
 .muted { color: var(--text-muted); font-size: 0.85em; }
+/* Catalogue */
+.cat-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+.cat-head .muted { margin-right: auto; }
+.cat-trust { margin-bottom: 10px; }
+.cat-err { background: var(--status-warning-bg); color: var(--status-warning-fg); padding: 8px 10px;
+    border-radius: var(--radius-small); margin-bottom: 10px; }
+.cat-err[hidden], .cat-jeton[hidden] { display: none; }
+.cat-jeton { border: 1px solid var(--border-soft); border-radius: var(--radius-small); padding: 10px 12px; margin-bottom: 10px; }
+.cat-msg { min-height: 1.2em; margin: 6px 0 10px; }
+.cat-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 0.85em; white-space: nowrap; }
+.cat-chip::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.cat-chip.absent { color: var(--text-muted); } .cat-chip.absent::before { background: none; border: 1.5px solid currentColor; width: 6px; height: 6px; }
+.cat-chip.a_jour { color: var(--status-running-fg); }
+.cat-chip.maj { color: var(--status-warning-fg); }
+.cat-chip.git, .cat-chip.locale_plus_recente, .cat-chip.inconnu { color: var(--text-muted); }
+.cat-desc { color: var(--text-muted); font-size: 0.85em; }
+.cat-sub { font-size: 0.82em; color: var(--text-muted); margin-top: 3px; }
+.cat-dev { font-size: 0.75em; padding: 0 6px; border-radius: 999px; border: 1px solid var(--border-soft); color: var(--text-muted); margin-left: 6px; }
+.cat-news { font-size: 0.85em; margin: 4px 0 0; padding-left: 18px; }
 /* Rôles & périmètres */
 .rl-tbl th, .rl-tbl td { text-align: center; }
 .rl-tbl th:first-child, .rl-tbl td:first-child { text-align: left; }
@@ -136,6 +155,7 @@ table.set-tbl { width: 100%; border-collapse: collapse; font-size: 0.9em; }
     <button class="tab" data-t="users">{{ _('settings.tab_users') }}</button>
     <button class="tab" data-t="roles">{{ _('settings.tab_roles') }}</button>
     <button class="tab" data-t="plugins">{{ _('settings.tab_plugins') }}</button>
+    <button class="tab" data-t="catalogue">{{ _('settings.tab_catalogue') }}</button>
     <button class="tab" data-t="rules">{{ _('settings.tab_rules') }}</button>
     {% if tool_config_schemas %}<button class="tab" data-t="toolcfg">{{ _('settings.tab_toolcfg') }}</button>{% endif %}
     <button class="tab" data-t="services">{{ _('settings.tab_services') }}</button>
@@ -266,6 +286,36 @@ table.set-tbl { width: 100%; border-collapse: collapse; font-size: 0.9em; }
         <button class="btn" id="ru-cancel">{{ _('settings.fleet_cancel') }}</button>
         <span class="muted" id="ru-msg"></span>
       </div>
+    </div>
+  </div>
+
+  <!-- Catalogue : outils et services publiés sur GitHub (repris de Bobi.Studio) -->
+  <div class="set-panel" id="p-catalogue">
+    <div class="set-card">
+      <div class="cat-head">
+        <h3 style="margin:0">{{ _('settings.cat_title') }}</h3>
+        <span class="muted" id="cat-source"></span>
+        <button class="btn btn-sm" id="cat-reload">↻ {{ _('settings.cat_reload') }}</button>
+      </div>
+      <div class="muted cat-trust" id="cat-trust"></div>
+      <div class="frow">
+        <label for="cat-actif">{{ _('settings.cat_actif') }}</label><input type="checkbox" class="ios-toggle" id="cat-actif">
+        <label for="cat-activer" style="min-width:auto;margin-left:18px">{{ _('settings.cat_activer') }}</label><input type="checkbox" class="ios-toggle" id="cat-activer">
+      </div>
+      <div class="cat-err" id="cat-err" hidden></div>
+      <div class="cat-jeton" id="cat-jeton" hidden>
+        <div class="muted">{{ _('settings.cat_jeton_hint') }}</div>
+        <div class="frow"><input type="password" id="cat-jeton-in" autocomplete="off" placeholder="ghp_…" aria-label="{{ _('settings.cat_jeton') }}">
+          <button class="btn btn-sm" id="cat-jeton-save">{{ _('settings.save') }}</button>
+          <button class="btn btn-sm" id="cat-jeton-del" hidden>{{ _('settings.cat_jeton_del') }}</button>
+          <span class="muted" id="cat-jeton-msg"></span></div>
+      </div>
+      <div class="cat-msg" id="cat-msg" role="status"></div>
+      <h4>{{ _('settings.cat_plugins') }}</h4>
+      <div id="cat-plugins" class="muted">…</div>
+      <h4 style="margin-top:18px">{{ _('settings.cat_services') }}</h4>
+      <div class="muted" style="margin-bottom:6px">{{ _('settings.cat_services_hint') }}</div>
+      <div id="cat-services" class="muted">…</div>
     </div>
   </div>
 
@@ -840,7 +890,7 @@ let SETTINGS = {}, USERS = [];
 // c'est de l'installation, pas un protocole d'exploitation.
 const SET_GROUPS = [
   {id: 'general',    tabs: ['appearance', 'users', 'roles']},
-  {id: 'outils',     tabs: ['plugins', 'rules', 'toolcfg', 'services']},
+  {id: 'outils',     tabs: ['catalogue', 'plugins', 'rules', 'toolcfg', 'services']},
   {id: 'protocoles', tabs: ['controllers', 'emberplus', 'tsl', 'swp08']},
   {id: 'systeme',    tabs: ['network', 'backup', 'deploy', 'mail', 'audit', 'i18n']},
 ];
@@ -1325,6 +1375,126 @@ document.getElementById('ctl-save').onclick = async () => {
     await BT.fetchJSON('/api/controllers'+(CTL_EDIT ? '/'+CTL_EDIT : ''), {method: CTL_EDIT ? 'PUT' : 'POST', body});
     BT.toast(window.t('js.saved')); ctlOpen(null); loadControllers();
   } catch(e){ document.getElementById('ctl-msg').textContent = '✕ ' + e.message; }
+};
+
+// ── Catalogue (outils et services publiés) ──────────────────────────────────
+// Chargé à l'ouverture de l'onglet seulement : chaque lecture coûte du quota GitHub.
+let CAT = null;
+function catAge(sec){
+  if(sec == null) return '';
+  const m = Math.round(sec / 60);
+  return m < 1 ? window.t('settings.cat_age_now') : window.t('settings.cat_age_min').replace('{n}', m);
+}
+async function loadCatalogue(force){
+  const T = window.t;
+  document.getElementById('cat-plugins').textContent = '…';
+  try { CAT = await BT.fetchJSON('/api/catalogue' + (force ? '?force=1' : '')); }
+  catch(e){ document.getElementById('cat-plugins').textContent = e.message; return; }
+  document.getElementById('cat-actif').checked = !!CAT.actif;
+  document.getElementById('cat-activer').checked = !!CAT.activer_defaut;
+  document.getElementById('cat-source').textContent = 'github.com/' + CAT.org + (CAT.age_s != null ? ' · ' + catAge(CAT.age_s) : '')
+    + ' · Bobi.Tools ' + CAT.core.version;
+  document.getElementById('cat-trust').textContent = T('settings.cat_trust').replace('{org}', CAT.org);
+  const err = document.getElementById('cat-err');
+  err.hidden = !CAT.erreur; err.textContent = CAT.erreur ? '⚠ ' + CAT.erreur : '';
+  // Le champ du jeton n'apparaît que s'il sert : quota atteint, ou jeton déjà posé.
+  const quota = /quota/i.test(CAT.erreur || '');
+  document.getElementById('cat-jeton').hidden = !(quota || CAT.jeton);
+  document.getElementById('cat-jeton-del').hidden = !CAT.jeton;
+  if(!CAT.actif){
+    document.getElementById('cat-plugins').textContent = T('settings.cat_off');
+    document.getElementById('cat-services').textContent = '';
+    return;
+  }
+  catRender('plugin', 'cat-plugins'); catRender('service', 'cat-services');
+}
+function catLabelOf(type){ const e = (CAT.entrees || []).find(x => x.type === type && x.genre === 'plugin'); return e ? e.label : type; }
+function catRender(genre, id){
+  const T = window.t, E = BT.esc;
+  const list = (CAT.entrees || []).filter(e => e.genre === genre);
+  const box = document.getElementById(id);
+  if(!list.length){ box.textContent = T(CAT.erreur ? 'settings.cat_unavailable' : 'settings.cat_empty'); return; }
+  box.innerHTML = '<div style="overflow-x:auto"><table class="set-tbl"><thead><tr><th>' + E(T('settings.cat_col_name')) + '</th><th>'
+    + E(T('settings.cat_col_pub')) + '</th><th>' + E(T('settings.cat_col_inst')) + '</th><th>' + E(T('settings.cat_col_state')) + '</th><th></th></tr></thead><tbody>'
+    + list.map(e => {
+        const manq = (e.requires || []).filter(t => !(CAT.entrees || []).some(x => x.type === t && x.version_installee));
+        let sub = '';
+        if((e.requires || []).length) sub += '<div class="cat-sub">' + E(T('settings.cat_requires')) + ' '
+          + e.requires.map(t => E(catLabelOf(t)) + (manq.includes(t) ? ' (' + E(T('settings.cat_missing')) + ')' : ' ✓')).join(', ') + '</div>';
+        if(e.indisponible) sub += '<div class="cat-sub">' + E(e.indisponible) + '</div>';
+        let btn = '';
+        if(e.installable && (e.etat === 'absent' || e.etat === 'maj')){
+          const lbl = T(e.etat === 'maj' ? 'settings.cat_update' : 'settings.cat_install');
+          btn = '<button class="btn btn-sm ' + (e.etat === 'maj' ? 'btn-orange' : 'btn-green') + ' cat-go" data-depot="' + E(e.depot) + '">' + E(lbl) + '</button>';
+          if(e.etat === 'absent' && manq.length)
+            btn += ' <button class="btn btn-sm cat-go" data-depot="' + E(e.depot) + '" data-deps="1">' + E(T('settings.cat_install_deps')) + '</button>';
+        }
+        return '<tr><td><a href="' + E(e.url) + '" target="_blank" rel="noopener"><b>' + E(e.label) + '</b> ↗</a>'
+          + '<div class="cat-desc">' + E(e.description || '') + '</div>' + sub
+          + '<details class="cat-nd" data-depot="' + E(e.depot) + '"><summary class="muted" style="cursor:pointer;font-size:0.82em">' + E(T('settings.cat_news')) + '</summary><ul class="cat-news"><li>…</li></ul></details></td>'
+          + '<td class="mono">' + E(e.version_dispo || '—') + (e.dev ? '<span class="cat-dev" title="' + E(T('settings.cat_dev_tip')) + '">' + E(T('settings.cat_dev')) + '</span>' : '') + '</td>'
+          + '<td class="mono">' + E(e.version_installee || '—') + '</td>'
+          + '<td><span class="cat-chip ' + E(e.etat) + '">' + E(T('settings.cat_st_' + e.etat)) + '</span></td>'
+          + '<td style="white-space:nowrap;text-align:right">' + btn + '</td></tr>';
+      }).join('') + '</tbody></table></div>';
+  box.querySelectorAll('.cat-go').forEach(b => b.onclick = () => catInstall(b.dataset.depot, !!b.dataset.deps));
+  box.querySelectorAll('.cat-nd').forEach(d => d.addEventListener('toggle', async () => {
+    if(!d.open || d.dataset.lu) return;
+    d.dataset.lu = '1';
+    try {
+      const r = await BT.fetchJSON('/api/catalogue/nouveautes?depot=' + encodeURIComponent(d.dataset.depot));
+      d.querySelector('ul').innerHTML = (r.entrees || []).map(x => '<li>' + BT.esc(x.length > 400 ? x.slice(0, 400) + '…' : x) + '</li>').join('') || '<li>—</li>';
+    } catch(e){ d.querySelector('ul').innerHTML = '<li>' + BT.esc(e.message) + '</li>'; }
+  }));
+}
+async function catInstall(depot, avecDeps){
+  const T = window.t, msg = document.getElementById('cat-msg');
+  const e = (CAT.entrees || []).find(x => x.depot === depot);
+  const suite = [];
+  if(avecDeps) (e.requires || []).forEach(t => {
+    const d = (CAT.entrees || []).find(x => x.type === t && x.genre === 'plugin' && !x.version_installee);
+    if(d) suite.push(d);
+  });
+  suite.push(e);
+  const noms = suite.map(x => x.label + ' ' + x.version_dispo).join(', ');
+  if(!confirm(T('settings.cat_confirm').replace('{x}', noms))) return;
+  const activer = document.getElementById('cat-activer').checked;
+  const faits = [];
+  for(const x of suite){
+    msg.style.color = ''; msg.textContent = T('settings.cat_installing').replace('{x}', x.label);
+    try {
+      const r = await BT.fetchJSON('/api/catalogue/install', {body: {depot: x.depot, activer}});
+      let t = x.label + ' ' + r.version + ' — ' + T(r.active ? 'settings.cat_done_active' : 'settings.cat_done_stored');
+      if(r.runtime === 'docker') t += ' ' + T('settings.cat_done_docker');
+      if(r.redemarrage) t += ' ' + T('settings.cat_done_restart');
+      faits.push(t);
+    } catch(err){
+      msg.style.color = 'var(--status-stopped-fg)';
+      msg.textContent = '✕ ' + x.label + ' : ' + err.message + (faits.length ? ' — ' + faits.join(' · ') : '');
+      return loadCatalogue();
+    }
+  }
+  msg.style.color = 'var(--status-running-fg)';
+  msg.textContent = '✓ ' + faits.join(' · ');
+  loadCatalogue();
+}
+document.getElementById('cat-reload').onclick = () => loadCatalogue(true);
+['cat-actif', 'cat-activer'].forEach(id => document.getElementById(id).onchange = async (ev) => {
+  const k = id === 'cat-actif' ? 'catalogue_actif' : 'catalogue_activer';
+  try { await BT.fetchJSON('/api/catalogue/reglages', {body: {[k]: ev.target.checked}}); }
+  catch(e){ ev.target.checked = !ev.target.checked; BT.toast(e.message, 'error'); return; }
+  if(id === 'cat-actif') loadCatalogue();     // « activer après » ne relit rien : pas de quota pour rien
+});
+document.getElementById('cat-jeton-save').onclick = async () => {
+  const m = document.getElementById('cat-jeton-msg');
+  try {
+    const r = await BT.fetchJSON('/api/catalogue/jeton', {body: {jeton: document.getElementById('cat-jeton-in').value}});
+    document.getElementById('cat-jeton-in').value = '';
+    m.textContent = window.t('settings.cat_jeton_ok').replace('{n}', r.limite); loadCatalogue(true);
+  } catch(e){ m.textContent = '✕ ' + e.message; }
+};
+document.getElementById('cat-jeton-del').onclick = async () => {
+  await BT.fetchJSON('/api/catalogue/jeton', {body: {jeton: ''}}); loadCatalogue();
 };
 
 // ── Plugins ──────────────────────────────────────────────────────────────────
@@ -2633,6 +2803,7 @@ const LOADERS = { appearance: loadAppearance };
 {% else %}
 const LOADERS = { appearance: loadAppearance, users: loadUsers, plugins: loadPlugins,
                   roles: loadRoles, rules: loadRules, controllers: loadControllers,
+                  catalogue: () => loadCatalogue(false),
                   toolcfg: loadToolCfg,
                   services: loadServices, i18n: loadI18n, audit: loadAudit,
                   backup: loadBackup, network: loadNetwork,

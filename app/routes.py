@@ -31,7 +31,7 @@ from flask import (Blueprint, render_template, request, jsonify, redirect,
 from . import settings as st
 from . import plugins, core_plugins, deploy, backup, i18n as i18n_mod
 from . import tools as tools_mod
-from . import builder, updater, gitupdate, droits
+from . import builder, updater, gitupdate, droits, catalogue, paquets
 from .auth import (require_login, require_perm, require_tool, current_user,
                    login_user, logout_user, hash_password, verify_password,
                    has_perm, can_access_tool, accessible_tools, user_group_ids,
@@ -1611,25 +1611,99 @@ def api_plugin_import():
     if not f or not f.filename:
         return jsonify({"error": "aucun fichier"}), 400
     activate = request.form.get("activate", "true").lower() != "false"
-    with tempfile.TemporaryDirectory() as tmp:
-        try:
-            with zipfile.ZipFile(f.stream) as z:
-                z.extractall(tmp)
-        except zipfile.BadZipFile:
-            return jsonify({"error": "archive .bobitool invalide"}), 400
-        src = _find_manifest_dir(tmp)
-        if not src:
-            return jsonify({"error": "plugin.json introuvable dans l'archive"}), 400
-        man, err = plugins.validate_package(src)
-        if err:
-            return jsonify({"error": err}), 400
-        plugins.stamp_imported_at(src)
-        try:
-            res = plugins.install_package(src, activate=activate)
-        except Exception as e:
-            return jsonify({"error": str(e)}), 400
+    try:
+        res = paquets.installer_archive(f.stream.read(), "plugin", activate)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     _audit(res["type"], "tool_import", f"v{res['version']}")
     return jsonify(res)
+
+
+# ─── Catalogue (outils et services publiés sur GitHub) ──────
+
+@bp.route("/api/catalogue")
+@require_perm("tools.manage")
+def api_catalogue():
+    """Liste publiée + état installé. L'erreur (pas d'Internet, quota) voyage en DONNÉE."""
+    out = catalogue.lister(force=request.args.get("force") == "1")
+    from app.version import VERSION
+    out["core"] = {"version": VERSION}
+    u = current_user() or {}
+    out["jeton"] = bool((u.get("gh_token") or "").strip())
+    out["activer_defaut"] = str(st.get("catalogue_activer") if st.get("catalogue_activer")
+                                is not None else "1") not in ("0", "false", "")
+    return jsonify(out)
+
+
+@bp.route("/api/catalogue/nouveautes")
+@require_perm("tools.manage")
+def api_catalogue_nouveautes():
+    return jsonify({"entrees": catalogue.nouveautes(request.args.get("depot") or "")})
+
+
+@bp.route("/api/catalogue/reglages", methods=["POST"])
+@require_perm("settings.edit")
+def api_catalogue_reglages():
+    d = _json()
+    for k in ("catalogue_actif", "catalogue_activer"):
+        if k in d:
+            st.set(k, "1" if d[k] else "0")
+    _audit("system", "catalogue_reglages", json.dumps(d))
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/catalogue/jeton", methods=["POST"])
+@require_login
+def api_catalogue_jeton():
+    """Jeton GitHub personnel : vérifié AVANT d'être enregistré (/rate_limit ne compte pas dans
+    le quota) ; vide = l'effacer. Jamais renvoyé ni journalisé."""
+    tok = (_json().get("jeton") or "").strip()
+    u = current_user()
+    if not tok:
+        db_update_user(u["id"], gh_token="")
+        return jsonify({"ok": True, "jeton": False})
+    try:
+        r = requests.get("https://api.github.com/rate_limit", timeout=8,
+                         headers={"Authorization": f"Bearer {tok}", "User-Agent": "bobitools-catalogue"})
+        limite = (r.json().get("rate") or {}).get("limit", 0) if r.ok else 0
+    except Exception as e:
+        return jsonify({"error": f"GitHub injoignable : {e}"}), 502
+    if not r.ok or limite <= 60:
+        return jsonify({"error": "jeton refusé par GitHub (invalide ou sans effet sur le quota)"}), 400
+    db_update_user(u["id"], gh_token=tok)
+    _audit("system", "catalogue_jeton", "enregistré")
+    return jsonify({"ok": True, "jeton": True, "limite": limite})
+
+
+@bp.route("/api/catalogue/install", methods=["POST"])
+@require_perm("tools.manage")
+def api_catalogue_install():
+    """Installe (ou met à jour) un outil/service du catalogue, par le MÊME chemin que l'import
+    manuel. Le dépôt doit figurer dans le catalogue (liste blanche)."""
+    d = _json()
+    depot = str(d.get("depot") or "")
+    try:
+        data, e = catalogue.telecharger(depot)
+    except ValueError as err:
+        return jsonify({"error": str(err)}), 400
+    except Exception as err:
+        return jsonify({"error": f"téléchargement impossible : {err}"}), 502
+    if e["genre"] == "service" and not has_perm("settings.edit"):
+        return jsonify({"error": "forbidden", "missing_permission": "settings.edit"}), 403
+    if e["etat"] == "a_jour":
+        return jsonify({"error": f"{e['label']} {e['version_installee']} est déjà installé"}), 409
+    activer = bool(d.get("activer", True))
+    try:
+        res = paquets.installer_archive(data, e["genre"], activer, attendu=e["type"])
+    except ValueError as err:
+        return jsonify({"error": str(err)}), 400
+    _audit(e["type"], "catalogue_install", f"{e['depot']} @ {e['ref']} → v{res['version']}"
+           + ("" if activer else " (non activée)"))
+    manquants = [t for t in e.get("requires") or [] if not plugins.is_tool(t)]
+    return jsonify({"ok": True, "genre": e["genre"], "type": e["type"], "version": res["version"],
+                    "active": activer, "dev": e["dev"], "runtime": e.get("runtime"),
+                    "redemarrage": e["genre"] == "service",
+                    "requires_manquants": manquants})
 
 
 def _find_manifest_dir(root, manifest="plugin.json"):
@@ -1728,23 +1802,10 @@ def api_service_import():
     if not f or not f.filename:
         return jsonify({"error": "aucun fichier"}), 400
     activate = request.form.get("activate", "true").lower() != "false"
-    with tempfile.TemporaryDirectory() as tmp:
-        try:
-            with zipfile.ZipFile(f.stream) as z:
-                z.extractall(tmp)
-        except zipfile.BadZipFile:
-            return jsonify({"error": "archive .bobitool invalide"}), 400
-        src = _find_manifest_dir(tmp, "manifest.json")
-        if not src:
-            return jsonify({"error": "manifest.json introuvable dans l'archive"}), 400
-        man, err = core_plugins.validate_package(src)
-        if err:
-            return jsonify({"error": err}), 400
-        core_plugins.stamp_imported_at(src)
-        try:
-            res = core_plugins.install_package(src, activate=activate)
-        except Exception as e:
-            return jsonify({"error": str(e)}), 400
+    try:
+        res = paquets.installer_archive(f.stream.read(), "service", activate)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     _audit(res["id"], "service_import", f"v{res['version']}")
     return jsonify(res)
 

@@ -6,27 +6,31 @@
 #
 #     bash <(curl -fsSL https://raw.githubusercontent.com/bob-integration/bobitools/main/get.sh)
 #
-# ★ UN VRAI CLONE GIT, PAS UNE ARCHIVE (différence assumée avec le get.sh de Bobi.Studio).
+# ★ UN VRAI CLONE GIT DU CŒUR, PAS UNE ARCHIVE (différence assumée avec le get.sh de Studio).
 # Bobi.Tools se met à jour depuis GitHub par un fast-forward (Réglages → Déploiement → GitHub) :
-# une instance installée depuis une archive n'aurait pas de dépôt git et ne pourrait jamais se
-# mettre à jour par ce chemin. On installe donc git s'il manque, et l'on clone AVEC les submodules
-# (chaque plugin et service est un dépôt à part).
+# sans dépôt git, ce chemin serait fermé. Les OUTILS, eux, viennent du Catalogue (comme Studio) :
+# le script propose de les installer tout de suite, et l'on en ajoute ensuite depuis
+# Réglages → Outils → Catalogue.
 #
 # Options :
 #   --dir <chemin>   dossier d'installation (défaut : /opt/bobitools)
 #   --ref <branche>  branche ou tag à installer (défaut : main)
 #   --docker         installer Docker sans demander     --no-docker   ne pas l'installer
+#   --outils <choix> outils à installer : tous | aucun | liste « switch_ports,notes »
+#                    (défaut : demander ; « tous » en non interactif)
 #   -y               répondre oui à tout (installation non interactive)
 #
 # Variables : BOBI_DIR, BOBI_REF, BOBI_REPO (défaut https://github.com/bob-integration/bobitools),
-#             BOBI_LANG=fr|en.
+#             BOBI_LANG=fr|en, BOBI_GH_TOKEN (jeton GitHub, facultatif : quota du Catalogue
+#             porté de 60 à 5 000 requêtes/heure — utile derrière une IP partagée).
 set -euo pipefail
 
-INSTALLEUR_VERSION="2026.10.06"   # ⚠ à changer à chaque modification de ce fichier
+INSTALLEUR_VERSION="2026.10.08"   # ⚠ à changer à chaque modification de ce fichier
 REPO="${BOBI_REPO:-https://github.com/bob-integration/bobitools}"
 DIR="${BOBI_DIR:-/opt/bobitools}"
 REF="${BOBI_REF:-main}"
 DOCKER=""          # vide = demander ; oui | non
+OUTILS="${BOBI_OUTILS:-}"   # vide = demander ; tous | aucun | liste
 OUI=0
 
 c_g=$'\033[32m'; c_y=$'\033[33m'; c_r=$'\033[31m'; c_b=$'\033[34m'; c_0=$'\033[0m'
@@ -55,7 +59,7 @@ _t() {
                 en="without Docker: only in-process tools will be available (Docker can be added later)." ;;
     existe)     fr="%s existe déjà. Pour une instance en place, mettez-la à jour depuis Réglages → Déploiement."
                 en="%s already exists. For an existing instance, update it from Settings → Deployment." ;;
-    clone)      fr="clonage de %s (%s), avec les plugins…"; en="cloning %s (%s), with plugins…" ;;
+    clone)      fr="clonage de %s (%s)…";                   en="cloning %s (%s)…" ;;
     clone_ko)   fr="clonage impossible — réseau, ou dépôt inaccessible ?"
                 en="clone failed — network, or repository unreachable?" ;;
     install)    fr="installation (venv, dépendances, service)…"; en="installing (venv, dependencies, service)…" ;;
@@ -63,6 +67,13 @@ _t() {
     fini)       fr="Bobi.Tools est installé.";               en="Bobi.Tools is installed." ;;
     ouvrir)     fr="Ouvrir %s pour créer le premier administrateur."
                 en="Open %s to create the first administrator." ;;
+    outils_q)   fr="  ${c_y}?${c_0} Outils à installer depuis le Catalogue — [T]ous, [A]ucun, ou une liste (ex. switch_ports,notes) [T] : "
+                en="  ${c_y}?${c_0} Tools to install from the Catalogue — [A]ll, [N]one, or a list (e.g. switch_ports,notes) [A]: " ;;
+    outils)     fr="installation des outils (%s)…";          en="installing tools (%s)…" ;;
+    outils_non) fr="aucun outil installé : Réglages → Outils → Catalogue pour en ajouter."
+                en="no tool installed: Settings → Tools → Catalogue to add some." ;;
+    outils_ko)  fr="certains outils n'ont pas pu être installés : réessayer depuis Réglages → Outils → Catalogue."
+                en="some tools could not be installed: retry from Settings → Tools → Catalogue." ;;
     sans_sysd)  fr="pas de systemd ici : démarrer à la main avec  cd %s && ./venv/bin/python main.py"
                 en="no systemd here: start manually with  cd %s && ./venv/bin/python main.py" ;;
   esac
@@ -76,9 +87,10 @@ while [ $# -gt 0 ]; do
     --dir) DIR="$2"; shift 2 ;;
     --ref) REF="$2"; shift 2 ;;
     --docker) DOCKER=oui; shift ;;
+    --outils) OUTILS="$2"; shift 2 ;;
     --no-docker) DOCKER=non; shift ;;
     -y) OUI=1; shift ;;
-    -h|--help) sed -n '4,22p' "$0"; exit 0 ;;
+    -h|--help) sed -n '4,24p' "$0"; exit 0 ;;
     *) die "option inconnue / unknown option: $1" ;;
   esac
 done
@@ -132,6 +144,28 @@ ok "$DIR"
 # ── Installation ─────────────────────────────────────────────
 log "$(_t install)"
 bash "$DIR/install.sh"
+
+# ── Outils (Catalogue) ───────────────────────────────────────
+if [ -z "$OUTILS" ]; then
+  if [ "$OUI" = 1 ]; then OUTILS=tous
+  else read -r -p "$(_t outils_q)" r
+    # « A » veut dire Aucun en français mais All en anglais : la réponse se lit dans SA langue.
+    r="${r:-défaut}"
+    if [ "$UI" = en ]; then
+      case "$r" in défaut|[aA]|[aA]ll) OUTILS=tous ;; [nN]|[nN]one) OUTILS=aucun ;; *) OUTILS="$r" ;; esac
+    else
+      case "$r" in défaut|[tT]|[tT]ous) OUTILS=tous ;; [aA]|[aA]ucun) OUTILS=aucun ;; *) OUTILS="$r" ;; esac
+    fi
+  fi
+fi
+if [ "$OUTILS" = aucun ]; then
+  warn "$(_t outils_non)"
+else
+  log "$(_t outils "$OUTILS")"
+  liste=$( [ "$OUTILS" = tous ] && echo tous || echo "$OUTILS" | tr ',' ' ' )
+  # shellcheck disable=SC2086
+  ( cd "$DIR" && ./venv/bin/python tools/catalogue.py installe $liste ) || warn "$(_t outils_ko)"
+fi
 
 if command -v systemctl >/dev/null && [ -d /run/systemd/system ]; then
   systemctl start bobitools && ok "$(_t demarre)"

@@ -55,6 +55,10 @@ def init_db():
         if "lang" not in ucols:
             db.execute("ALTER TABLE users ADD COLUMN lang TEXT DEFAULT 'fr'")
         # Thème PERSONNEL (comme la langue). Vide = défaut du système (setting `theme`).
+        # Jeton GitHub PERSONNEL (catalogue) : élargit le quota d'API pour qui en a besoin. Par
+        # utilisateur, pas par site : un jeton est une identité, pas un secret partagé.
+        if "gh_token" not in ucols:
+            db.execute("ALTER TABLE users ADD COLUMN gh_token TEXT DEFAULT ''")
         if "theme" not in ucols:
             db.execute("ALTER TABLE users ADD COLUMN theme TEXT DEFAULT ''")
 
@@ -237,7 +241,7 @@ def db_create_user(username, password_hash, role, prenom=None, nom=None, email=N
 
 
 def db_update_user(uid, role=None, password_hash=None, prenom=None, nom=None,
-                   email=None, lang=None, theme=None):
+                   email=None, lang=None, theme=None, gh_token=None):
     with get_db() as db:
         if role is not None:
             db.execute("UPDATE users SET role=? WHERE id=?", (role, uid))
@@ -254,6 +258,8 @@ def db_update_user(uid, role=None, password_hash=None, prenom=None, nom=None,
             db.execute("UPDATE users SET lang=? WHERE id=?", (lang, uid))
         if theme is not None:
             db.execute("UPDATE users SET theme=? WHERE id=?", (theme, uid))
+        if gh_token is not None:
+            db.execute("UPDATE users SET gh_token=? WHERE id=?", (gh_token, uid))
         db.commit()
 
 

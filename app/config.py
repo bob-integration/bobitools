@@ -25,6 +25,12 @@ DOCKER_LABEL = "bobitool"
 # False par défaut pour ne pas casser un accès direct en HTTP (http://ip:5000).
 SESSION_COOKIE_SECURE = False
 
+# Organisation GitHub du CATALOGUE (Réglages → Outils → Catalogue). C'est le SEUL point de
+# confiance du mécanisme : installer un outil, c'est exécuter son code sur ce serveur. Elle ne
+# se règle donc PAS depuis l'interface (cela ferait d'un droit de réglage un droit d'exécution),
+# seulement ici ou dans config_local.py — ce qui exige un accès au serveur. Repris de Bobi.Studio.
+CATALOGUE_ORG = "bob-integration"
+
 # ── Surcharge locale ──────────────────────────────────────────────────────────
 try:
     # config_local.py est à la racine du projet (dans sys.path au démarrage).

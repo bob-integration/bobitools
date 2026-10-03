@@ -41,3 +41,7 @@ netboot_data/
 # Contrats publiés par les plugins in-process, lus par les conteneurs via un volume
 # nommé lié à ce répertoire. C'est de la DONNÉE d'exécution, jamais du code.
 contracts/
+
+# Outils et services installés depuis le Catalogue : propres à chaque instance.
+/plugins/*/
+/services/*/

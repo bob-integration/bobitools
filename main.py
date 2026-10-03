@@ -143,14 +143,15 @@ def inject_theme():
 
 @app.context_processor
 def inject_version():
-    """Version affichée en tête du menu « ? » : l'identité de build (date · hash git).
-    Bobi.Tools n'a pas de numéro de version applicatif — ses composants si. Sur un dépôt
-    git, builder.identity() la tient alignée sur HEAD (et la met en cache)."""
+    """Version affichée en tête du menu « ? » : le numéro de Bobi.Tools (app/version.py), et le
+    hash git du code qui tourne quand on le connaît (builder.identity(), en cache)."""
     from app import builder
+    from app.version import VERSION
     try:
-        return {"app_version": builder.identity().get("label") or ""}
+        gh = builder.identity().get("git_hash")
     except Exception:
-        return {"app_version": ""}
+        gh = None
+    return {"app_version": VERSION + (f" ({gh})" if gh else "")}
 
 
 @app.context_processor
