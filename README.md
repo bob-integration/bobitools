@@ -28,11 +28,18 @@ où tourne la logique.
 bash <(curl -fsSL https://raw.githubusercontent.com/bob-integration/bobitools/main/get.sh)
 ```
 
-Le script installe ce qui manque (git, python3-venv, et Docker si vous l'acceptez), clone le
-cœur de Bobi.Tools dans `/opt/bobitools`, installe les **outils** de votre choix (tous, aucun ou
-une liste), démarre le service, puis indique l'adresse de l'assistant de premier accès.
+Le script installe ce qui manque (curl, python3-venv, et Docker si vous l'acceptez), pose la
+**dernière version publiée** de Bobi.Tools dans `/opt/bobitools` (paquet de la release, vérifié
+par son empreinte SHA-256), installe les **outils** de votre choix (tous, aucun ou une liste),
+démarre le service, puis indique l'adresse de l'assistant de premier accès.
 Options : `--dir`, `--ref`, `--outils tous|aucun|switch_ports,notes`, `--docker` / `--no-docker`,
 `-y` (cf. `get.sh --help`).
+
+**Mettre à jour Bobi.Tools** : Réglages → Système → Déploiement, bloc « Version de Bobi.Tools ».
+Il compare l'instance à la dernière release publiée et applique la nouvelle (paquet vérifié,
+sauvegarde, redémarrage, retour arrière possible). Une **veille** quotidienne prévient les
+administrateurs par un bandeau ; elle n'installe jamais rien d'elle-même. Une instance installée
+par `git clone` (avant 1.2.0, ou de développement) se met à jour par l'onglet GitHub.
 
 **Ajouter ou mettre à jour un outil** : Réglages → Outils → **Catalogue**. Il liste les outils et
 services publiés sur GitHub (dépôts `bobitools-plugin-*` et `bobitools-service-*`), avec leur

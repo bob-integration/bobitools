@@ -450,6 +450,29 @@ table.set-tbl { width: 100%; border-collapse: collapse; font-size: 0.9em; }
       <span class="muted" id="dep-rollback-info"></span>
       <button class="btn btn-orange btn-sm" id="dep-rollback-btn">{{ _('settings.fleet_rollback') }}</button>
     </div>
+    {# Version du cœur : la release publiée sur GitHub, comparée à celle-ci, et la veille qui
+       prévient (app/maj_routes.py, app/update_watch.py — repris de Bobi.Studio). Au-dessus des
+       sous-onglets : c'est la question qu'on se pose en arrivant ici. #}
+    <div class="set-card" id="core-card">
+      <h3>{{ _('settings.core_title') }}</h3>
+      <div id="core-state" class="muted">…</div>
+      <div class="frow" style="margin-top:8px">
+        <button class="btn btn-sm" id="core-check">{{ _('settings.core_check') }}</button>
+        <button class="btn btn-sm btn-orange" id="core-apply" hidden></button>
+        <a class="btn btn-sm" id="core-notes" target="_blank" rel="noopener" hidden>{{ _('settings.core_notes') }} ↗</a>
+      </div>
+      <div class="frow" style="margin-top:6px">
+        <label for="core-watch">{{ _('settings.core_watch') }}</label>
+        <input type="checkbox" class="ios-toggle" id="core-watch">
+        <select id="core-watch-h" aria-label="{{ _('settings.core_watch_every') }}"></select>
+        <select id="core-watch-scope" aria-label="{{ _('settings.core_watch_scope') }}">
+          <option value="core">{{ _('settings.core_scope_core') }}</option>
+          <option value="all">{{ _('settings.core_scope_all') }}</option>
+        </select>
+        <span class="muted" id="core-watch-info"></span>
+      </div>
+      <div class="muted" style="margin-top:6px">{{ _('settings.core_hint') }}</div>
+    </div>
     <div class="subtabs" id="dep-subtabs" role="tablist">
       <button class="subtab active" data-st="fleet">{{ _('settings.fleet_tab') }}</button>
       <button class="subtab" data-st="github">{{ _('settings.git_tab') }}</button>
@@ -1702,8 +1725,68 @@ function switchDepSub(st){
 }
 document.querySelectorAll('#dep-subtabs .subtab').forEach(b => b.onclick = () => switchDepSub(b.dataset.st));
 
+// ── Version du cœur (release GitHub) + veille ──────────────────────────────────────
+async function loadCore(force){
+  const T = window.t, E = BT.esc, st = document.getElementById('core-state');
+  const apply = document.getElementById('core-apply'), notes = document.getElementById('core-notes');
+  if(!st) return;
+  apply.hidden = true; notes.hidden = true;
+  let r;
+  try { r = await BT.fetchJSON('/api/update/core' + (force ? '?force=1' : '')); }
+  catch(e){ st.textContent = T('settings.core_unreadable') + ' ' + e.message; return; }
+  const d = r.derniere;
+  let h = T('settings.core_installed') + ' <strong>' + E(r.version_installee) + '</strong>';
+  if(!r.catalogue_actif) h += ' · ' + E(T('settings.core_offline'));
+  else if(!d) h += ' · ' + E(T('settings.core_unknown'));
+  else {
+    h += ' · ' + E(T('settings.core_latest')) + ' <strong>' + E(d.version) + '</strong>'
+       + (d.publiee_le ? ' <span class="muted">(' + E(d.publiee_le) + ')</span>' : '');
+    if(d.url){ notes.href = d.url; notes.hidden = false; }
+    if(!r.disponible) h += ' — ' + E(T('settings.core_uptodate'));
+    else if(r.git) h += ' — ' + E(T('settings.core_git'));
+    else if(!d.applicable) h += ' — ' + E(T('settings.core_no_package'));
+    else { apply.textContent = T('settings.core_apply').replace('{v}', d.version); apply.hidden = false; apply.dataset.tag = d.tag; }
+  }
+  st.innerHTML = h;
+}
+async function loadCoreWatch(){
+  const T = window.t;
+  let w; try { w = await BT.fetchJSON('/api/update/watch'); } catch(e){ return; }
+  const cb = document.getElementById('core-watch'), sel = document.getElementById('core-watch-h');
+  cb.checked = !!w.settings.enabled;
+  sel.innerHTML = w.intervals_h.map(h => '<option value="' + h + '"' + (h === w.settings.interval_h ? ' selected' : '') + '>'
+    + BT.esc(T('settings.core_every').replace('{h}', h)) + '</option>').join('');
+  document.getElementById('core-watch-scope').value = w.settings.scope;
+  document.getElementById('core-watch-info').textContent = w.checked_at
+    ? T('settings.core_checked') + ' ' + new Date(w.checked_at * 1000).toLocaleString() : '';
+}
+async function saveCoreWatch(){
+  try {
+    await BT.fetchJSON('/api/update/watch', {method:'POST', body:{
+      enabled: document.getElementById('core-watch').checked,
+      interval_h: +document.getElementById('core-watch-h').value,
+      scope: document.getElementById('core-watch-scope').value}});
+    BT.toast(window.t('js.saved'), 'info');
+  } catch(e){ BT.toast(e.message, 'error'); }
+}
+document.getElementById('core-check').onclick = async () => {
+  try { await BT.fetchJSON('/api/update/watch/check', {method:'POST', body:{}}); } catch(e){}
+  await loadCore(true); loadCoreWatch();
+};
+['core-watch', 'core-watch-h', 'core-watch-scope'].forEach(id => document.getElementById(id).onchange = saveCoreWatch);
+document.getElementById('core-apply').onclick = async (ev) => {
+  const b = ev.currentTarget, T = window.t;
+  if(!(await window.BT.confirm(T('settings.core_apply_confirm').replace('{v}', b.textContent), { danger: true }))) return;
+  b.disabled = true;
+  try {
+    const r = await BT.fetchJSON('/api/update/core/apply', {method:'POST', body:{tag: b.dataset.tag}});
+    BT.toast(r.message, 'info');
+  } catch(e){ BT.toast(e.message, 'error'); b.disabled = false; }
+};
+
 async function loadDeploy(){
   loadRollback();
+  loadCore(false); loadCoreWatch();
   switchDepSub(((location.hash||'').split('/')[1]) || depSub);
 }
 

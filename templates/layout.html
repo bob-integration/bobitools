@@ -270,6 +270,11 @@
     })();
     </script>
 
+    {% if has_perm('settings.edit') %}
+    {# Veille des mises à jour (app/update_watch.py) : seulement pour qui peut agir. #}
+    <div class="bt-update-banner" id="bt-update-banner" role="status" hidden></div>
+    {% endif %}
+
     {% block content %}{% endblock %}
 
     {% if current_user %}
@@ -321,6 +326,33 @@
                 })();
             } catch(e){ alert(window.t('js.service.net_error')+' '+e.message); elBtn.disabled=false; }
         });
+    })();
+    </script>
+    {% endif %}
+
+    {% if has_perm('settings.edit') %}
+    <script>
+    // Bandeau « nouvelle version publiée » (veille quotidienne, app/update_watch.py). Il
+    // prévient, il n'installe rien ; « Ignorer cette version » le fait taire jusqu'à la suivante.
+    (async function(){
+        const el = document.getElementById('bt-update-banner');
+        if (!el) return;
+        let j;
+        try { const r = await fetch('/api/update/notice', {cache:'no-store'}); if (!r.ok) return; j = await r.json(); }
+        catch(e){ return; }
+        const items = (j && j.items) || [];
+        if (!items.length) return;
+        const E = window.BT.esc, T = window.t;
+        const quoi = items.map(i => '<strong>' + E(i.label) + ' ' + E(i.version) + '</strong>'
+            + (i.installed ? ' <span class="muted">(' + E(T('js.update.installed')) + ' ' + E(i.installed) + ')</span>' : '')).join(', ');
+        el.innerHTML = '<span>⬆ ' + E(T('js.update.available')) + ' : ' + quoi + '</span>'
+            + '<a class="btn btn-sm btn-blue" href="/settings#deploy">' + E(T('js.update.see')) + '</a>'
+            + '<button class="btn btn-sm" type="button" id="bt-update-dismiss">' + E(T('js.update.dismiss')) + '</button>';
+        el.hidden = false;
+        document.getElementById('bt-update-dismiss').onclick = async () => {
+            el.hidden = true;
+            try { await fetch('/api/update/notice/dismiss', {method:'POST'}); } catch(e){}
+        };
     })();
     </script>
     {% endif %}

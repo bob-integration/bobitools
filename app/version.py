@@ -17,7 +17,7 @@ titre et le tag de la version publiée : deux sources recopiées à la main fini
 diverger, et c'est le genre d'écart que personne ne remarque avant d'en avoir besoin.
 """
 
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 
 
 def analyser(v):

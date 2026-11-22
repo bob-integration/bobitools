@@ -6,29 +6,35 @@
 #
 #     bash <(curl -fsSL https://raw.githubusercontent.com/bob-integration/bobitools/main/get.sh)
 #
-# ★ UN VRAI CLONE GIT DU CŒUR, PAS UNE ARCHIVE (différence assumée avec le get.sh de Studio).
-# Bobi.Tools se met à jour depuis GitHub par un fast-forward (Réglages → Déploiement → GitHub) :
-# sans dépôt git, ce chemin serait fermé. Les OUTILS, eux, viennent du Catalogue (comme Studio) :
-# le script propose de les installer tout de suite, et l'on en ajoute ensuite depuis
-# Réglages → Outils → Catalogue.
+# ★ UNE RELEASE, PAS UN CLONE GIT (comme le get.sh de Bobi.Studio, depuis 1.2.0).
+# Par défaut, la DERNIÈRE VERSION PUBLIÉE : son paquet `bobitools.zip`, vérifié par le
+# `SHA256SUMS` joint à la release — le même paquet que tire ensuite la mise à jour
+# (Réglages → Système → Déploiement → « Mettre à jour vers … »). `--ref` installe une autre
+# étiquette ou une branche, depuis l'archive que sert GitHub (codeload) : curl suffit, git n'est
+# plus nécessaire. Avant 1.2.0, ce script clonait le dépôt : ces instances restent suivies par
+# git et se mettent à jour par l'onglet GitHub.
+# Les OUTILS viennent du Catalogue (comme Studio) : le script propose de les installer tout de
+# suite, et l'on en ajoute ensuite depuis Réglages → Outils → Catalogue.
 #
 # Options :
 #   --dir <chemin>   dossier d'installation (défaut : /opt/bobitools)
-#   --ref <branche>  branche ou tag à installer (défaut : main)
+#   --ref <ref>      étiquette (v1.2.0) ou branche (main) à installer (défaut : dernière release)
 #   --docker         installer Docker sans demander     --no-docker   ne pas l'installer
 #   --outils <choix> outils à installer : tous | aucun | liste « switch_ports,notes »
 #                    (défaut : demander ; « tous » en non interactif)
 #   -y               répondre oui à tout (installation non interactive)
 #
-# Variables : BOBI_DIR, BOBI_REF, BOBI_REPO (défaut https://github.com/bob-integration/bobitools),
+# Variables : BOBI_DIR, BOBI_REF, BOBI_REPO (défaut bob-integration/bobitools),
 #             BOBI_LANG=fr|en, BOBI_GH_TOKEN (jeton GitHub, facultatif : quota du Catalogue
 #             porté de 60 à 5 000 requêtes/heure — utile derrière une IP partagée).
 set -euo pipefail
 
-INSTALLEUR_VERSION="2026.10.08"   # ⚠ à changer à chaque modification de ce fichier
-REPO="${BOBI_REPO:-https://github.com/bob-integration/bobitools}"
+INSTALLEUR_VERSION="2026.11.22"   # ⚠ à changer à chaque modification de ce fichier
+REPO="${BOBI_REPO:-bob-integration/bobitools}"
+REPO="${REPO#https://github.com/}"           # ancienne forme (URL complète) encore acceptée
+ORG="${REPO%%/*}"
 DIR="${BOBI_DIR:-/opt/bobitools}"
-REF="${BOBI_REF:-main}"
+REF="${BOBI_REF:-}"                          # vide = la dernière release publiée
 DOCKER=""          # vide = demander ; oui | non
 OUTILS="${BOBI_OUTILS:-}"   # vide = demander ; tous | aucun | liste
 OUI=0
@@ -51,7 +57,7 @@ _t() {
     os)         fr="apt-get introuvable : ce script vise Debian / Ubuntu."
                 en="apt-get not found: this script targets Debian / Ubuntu." ;;
     paquets)    fr="paquets à installer : %s";              en="packages to install: %s" ;;
-    paquets_ok) fr="prérequis présents (git, python3, venv)"; en="prerequisites present (git, python3, venv)" ;;
+    paquets_ok) fr="prérequis présents (curl, python3, venv)"; en="prerequisites present (curl, python3, venv)" ;;
     docker_q)   fr="  ${c_y}?${c_0} Installer Docker (outils en conteneur : switchs, NMOS, caméras…) ? [O/n] "
                 en="  ${c_y}?${c_0} Install Docker (containerised tools: switches, NMOS, cameras…)? [Y/n] " ;;
     docker_ok)  fr="Docker présent";                        en="Docker present" ;;
@@ -59,9 +65,15 @@ _t() {
                 en="without Docker: only in-process tools will be available (Docker can be added later)." ;;
     existe)     fr="%s existe déjà. Pour une instance en place, mettez-la à jour depuis Réglages → Déploiement."
                 en="%s already exists. For an existing instance, update it from Settings → Deployment." ;;
-    clone)      fr="clonage de %s (%s)…";                   en="cloning %s (%s)…" ;;
-    clone_ko)   fr="clonage impossible — réseau, ou dépôt inaccessible ?"
-                en="clone failed — network, or repository unreachable?" ;;
+    derniere)   fr="dernière version publiée : %s";         en="latest published version: %s" ;;
+    sans_rel)   fr="aucune release lisible : installation depuis la branche main"
+                en="no readable release: installing from the main branch" ;;
+    paquet)     fr="paquet %s (%s), empreinte vérifiée";    en="package %s (%s), checksum verified" ;;
+    empreinte)  fr="empreinte du paquet invalide — rien n'a été installé"
+                en="package checksum mismatch — nothing was installed" ;;
+    archive)    fr="archive de %s (%s)…";                   en="archive of %s (%s)…" ;;
+    archive_ko) fr="téléchargement impossible — réseau, référence inexistante, ou dépôt inaccessible ?"
+                en="download failed — network, unknown reference, or repository unreachable?" ;;
     install)    fr="installation (venv, dépendances, service)…"; en="installing (venv, dependencies, service)…" ;;
     demarre)    fr="service démarré";                        en="service started" ;;
     fini)       fr="Bobi.Tools est installé.";               en="Bobi.Tools is installed." ;;
@@ -90,7 +102,7 @@ while [ $# -gt 0 ]; do
     --outils) OUTILS="$2"; shift 2 ;;
     --no-docker) DOCKER=non; shift ;;
     -y) OUI=1; shift ;;
-    -h|--help) sed -n '4,24p' "$0"; exit 0 ;;
+    -h|--help) sed -n '4,29p' "$0"; exit 0 ;;
     *) die "option inconnue / unknown option: $1" ;;
   esac
 done
@@ -107,7 +119,7 @@ export DEBIAN_FRONTEND=noninteractive
 
 # ── Prérequis ────────────────────────────────────────────────
 manque=()
-command -v git >/dev/null || manque+=(git)
+command -v curl >/dev/null || manque+=(curl)
 command -v python3 >/dev/null || manque+=(python3)
 python3 -c "import ensurepip, venv" 2>/dev/null || manque+=(python3-venv)
 [ -e /etc/ssl/certs/ca-certificates.crt ] || manque+=(ca-certificates)
@@ -137,9 +149,39 @@ fi
 
 # ── Source ───────────────────────────────────────────────────
 [ -e "$DIR" ] && die "$(_t existe "$DIR")"
-log "$(_t clone "$REPO" "$REF")"
-git clone -q --branch "$REF" --recurse-submodules "$REPO" "$DIR" || die "$(_t clone_ko)"
-ok "$DIR"
+_curl=(curl -fsSL --retry 3 --retry-delay 2 --connect-timeout 15)
+TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
+# La dernière release : l'index du catalogue (CDN, hors quota d'API), sinon l'API.
+if [ -z "$REF" ]; then
+  REF="$("${_curl[@]}" "https://raw.githubusercontent.com/$ORG/bobitools-catalog/HEAD/catalog.json" 2>/dev/null \
+         | python3 -c "import json,sys; print((json.load(sys.stdin).get('core') or {}).get('tag') or '')" 2>/dev/null || true)"
+  [ -n "$REF" ] || REF="$("${_curl[@]}" "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null \
+         | python3 -c "import json,sys; print(json.load(sys.stdin).get('tag_name') or '')" 2>/dev/null || true)"
+  if [ -n "$REF" ]; then ok "$(_t derniere "$REF")"; else warn "$(_t sans_rel)"; REF=main; fi
+fi
+SOURCE=""
+# Une ÉTIQUETTE porteuse du paquet de release : on le prend, et l'empreinte fait foi AVANT tout.
+REL="https://github.com/$REPO/releases/download/$REF"
+if "${_curl[@]}" -o "$TMP/bobitools.zip" "$REL/bobitools.zip" 2>/dev/null \
+   && "${_curl[@]}" -o "$TMP/SHA256SUMS" "$REL/SHA256SUMS" 2>/dev/null; then
+  ( cd "$TMP" && grep ' \*\?bobitools.zip$' SHA256SUMS | sha256sum -c --status - ) || die "$(_t empreinte)"
+  mkdir -p "$DIR"
+  python3 -c "import sys,zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])" "$TMP/bobitools.zip" "$DIR"
+  SOURCE=paquet
+  ok "$(_t paquet "$REF" "$(cut -c1-12 "$TMP/SHA256SUMS")…")"
+else
+  # Sinon (branche, ou étiquette sans paquet) : l'archive de source servie par GitHub.
+  log "$(_t archive "$REPO" "$REF")"
+  case "$REF" in v[0-9]*) kind=tags ;; *) kind=heads ;; esac
+  "${_curl[@]}" -o "$TMP/src.tgz" "https://codeload.github.com/$REPO/tar.gz/refs/$kind/$REF" 2>/dev/null \
+    || "${_curl[@]}" -o "$TMP/src.tgz" "https://codeload.github.com/$REPO/tar.gz/$REF" 2>/dev/null \
+    || die "$(_t archive_ko)"
+  mkdir -p "$DIR"
+  tar -xzf "$TMP/src.tgz" -C "$DIR" --strip-components=1 || die "$(_t archive_ko)"
+  SOURCE=archive
+fi
+[ -f "$DIR/main.py" ] || die "$(_t archive_ko)"
+ok "$DIR ($SOURCE)"
 
 # ── Installation ─────────────────────────────────────────────
 log "$(_t install)"

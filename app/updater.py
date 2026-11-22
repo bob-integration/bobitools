@@ -446,6 +446,103 @@ def apply_zip(zpath):
     return True, f"paquet importé{(' (v ' + label + ')') if label else ''} — redémarrage en cours"
 
 
+def _release_urls(tag):
+    """(url du zip, url des sommes) d'une release du cœur, SANS l'API : GitHub sert les fichiers
+    joints à une adresse stable, /releases/download/<tag>/<nom> (hors quota d'API)."""
+    from . import catalogue
+    org, _ttl, _actif = catalogue._reglages()
+    base = "https://github.com/%s/%s/releases/download/%s/" % (org, catalogue.DEPOT_CORE, tag)
+    return base + catalogue.ARTEFACT_CORE, base + catalogue.ARTEFACT_SOMMES
+
+
+def _telecharger(url, dest, timeout=120):
+    req = urllib.request.Request(url, headers={"User-Agent": "bobitools-maj"})
+    with urllib.request.urlopen(req, timeout=timeout) as r, open(dest, "wb") as f:  # noqa: S310
+        shutil.copyfileobj(r, f)
+
+
+def apply_update_github(tag=None):
+    """Tire une release publiée du cœur, vérifie son empreinte, applique, relance. Repris de
+    Bobi.Studio (`updater.apply_update_github`) : seule la SOURCE change par rapport à l'import
+    d'un zip — l'empreinte se lit dans le SHA256SUMS joint à la release. Tout le reste est
+    partagé : contrôle des dépendances, sauvegarde, extraction préservant l'état local,
+    redémarrage, et le `rollback` qui va avec.
+
+    ⚠ JAMAIS SUR UN CHECKOUT GIT. Une instance installée par `git clone` (développement, ou
+    `get.sh` d'avant 1.2) se met à jour par git (Déploiement → GitHub) : extraire un zip
+    par-dessus laisserait git croire à des modifications locales, et bloquerait sa mise à jour
+    suivante. On le DIT au lieu de le faire.
+    ⚠ ON REFUSE une release sans `bobitools.zip` + `SHA256SUMS` plutôt que de prendre l'archive
+    de source que GitHub sert d'office : elle n'a pas d'empreinte, et l'instance tourne en root."""
+    from . import catalogue, gitupdate
+    if gitupdate.is_git():
+        return False, ("cette instance suit un dépôt git : mettez-la à jour par Réglages → Système → "
+                       "Déploiement → GitHub")
+    org, _ttl, actif = catalogue._reglages()
+    if not actif:
+        return False, "catalogue désactivé sur cette instance (aucun accès à GitHub)"
+    if not tag:
+        info = catalogue.derniere_version_core(force=True)
+        if not info:
+            return False, "aucune release du cœur lisible sur GitHub"
+        if not (catalogue.ARTEFACT_CORE in info["artefacts"] and catalogue.ARTEFACT_SOMMES in info["artefacts"]):
+            return False, ("la release %s ne porte pas de paquet installable (%s + %s)"
+                           % (info["tag"], catalogue.ARTEFACT_CORE, catalogue.ARTEFACT_SOMMES))
+        tag = info["tag"]
+    zip_url, sha_url = _release_urls(tag)
+    tmpdir = tempfile.mkdtemp(prefix="btmaj-gh-")
+    try:
+        zpath = os.path.join(tmpdir, catalogue.ARTEFACT_CORE)
+        spath = os.path.join(tmpdir, catalogue.ARTEFACT_SOMMES)
+        try:
+            _telecharger(zip_url, zpath)
+            _telecharger(sha_url, spath)
+        except Exception as e:
+            return False, "téléchargement de la release %s échoué : %s" % (tag, e)
+        # L'empreinte fait foi AVANT toute lecture du contenu.
+        attendu = ""
+        try:
+            with open(spath, encoding="utf-8") as f:
+                for ligne in f:
+                    parts = ligne.split()
+                    if len(parts) >= 2 and parts[-1].lstrip("*").endswith(catalogue.ARTEFACT_CORE):
+                        attendu = parts[0].strip().lower()
+                        break
+        except Exception as e:
+            return False, "SHA256SUMS illisible : %s" % e
+        if not attendu:
+            return False, "SHA256SUMS ne mentionne pas %s" % catalogue.ARTEFACT_CORE
+        recu = sha256_file(zpath)
+        if recu != attendu:
+            return False, ("empreinte invalide (attendu %s…, reçu %s…) — rien n'a été appliqué"
+                           % (attendu[:12], recu[:12]))
+        try:
+            with zipfile.ZipFile(zpath) as zf:
+                noms = zf.namelist()
+        except Exception as e:
+            return False, "archive illisible : %s" % e
+        if "main.py" not in noms:
+            return False, "archive invalide (main.py absent)"
+        # Un composant que la release porterait mais qui n'est pas installé ICI n'apparaît pas
+        # tout seul (même règle que la mise à jour entre instances). Le paquet public du cœur
+        # n'en porte aucun : les outils viennent du Catalogue.
+        src_p = {n.split("/")[1] for n in noms if n.startswith("plugins/") and len(n.split("/")) > 2}
+        src_s = {n.split("/")[1] for n in noms if n.startswith("services/") and len(n.split("/")) > 2}
+        loc_p, loc_s = local_component_ids()
+        ok_req, req_msg = _ensure_requirements(zpath)
+        if not ok_req:
+            return False, req_msg
+        backup_code()
+        _extract_over(zpath, skip_plugins=src_p - loc_p, skip_services=src_s - loc_s)
+        with open(PENDING_PATH, "w") as f:
+            f.write(tag)
+        record_deploy(tag, "Bobi.Tools %s" % tag.lstrip("vV"))
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+    restart_service()
+    return True, "Bobi.Tools %s appliqué — redémarrage en cours" % tag.lstrip("vV")
+
+
 def rollback():
     """Restaure le dernier backup puis relance le service."""
     bk = latest_backup()

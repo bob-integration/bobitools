@@ -109,6 +109,8 @@ log.info("ProxyFix: x_for=%d (réglage trusted_proxies)", _trusted)
 # Flask interdit d'ajouter des routes à un blueprint déjà enregistré).
 from app import core_plugins
 core_plugins.register_all_routes(bp)
+# Mises à jour du cœur depuis les releases GitHub + veille (cf. app/maj_routes.py).
+from app import maj_routes  # noqa: F401,E402 — ses routes se montent sur `bp` à l'import
 
 app.register_blueprint(bp)
 
@@ -261,6 +263,9 @@ if __name__ == "__main__":
     from app import updater
     updater.confirm_boot_ok()
     threading.Thread(target=_backup_loop, daemon=True).start()
+    # Veille des mises à jour : prévient (bandeau, journal), n'installe jamais.
+    from app import update_watch
+    update_watch.start()
     # Services globaux (≠ outils-plugins) : démarrage générique depuis le registre
     # (chaque service expose un boot() optionnel). Configurés en Réglages.
     core_plugins.boot_all()

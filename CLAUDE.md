@@ -73,6 +73,16 @@ routes.py        ← Blueprint unique (pages + API outils + services + réglages
   Réglages → Système → Déploiement (sous-onglets Flotte / GitHub / Paquet). Artefacts (`dist/`,
   `build_info.json`, `deploy_info.json`, `UPDATE_PENDING`) gitignored ;
   `services/*/versions/` gitignored (comme les plugins).
+- **Releases du cœur et catalogue (modèle Studio, 1.2.0)** : `tools/publier_release.sh vX.Y.Z`
+  exporte le cœur vers le dépôt PUBLIC `bobitools` (export_public), joint à la release
+  `bobitools.zip` + `SHA256SUMS`, puis régénère l'index `catalog.json` du dépôt public
+  `bobitools-catalog` (`tools/catalogue_index.py` ; `--index-seulement` après la release d'un
+  outil). Les instances lisent cet INDEX sur le CDN (hors quota API ; l'API = repli) pour le
+  Catalogue ET la version du cœur. Bloc « Version de Bobi.Tools » (Déploiement) :
+  `app/maj_routes.py` (`/api/update/core`, `…/apply`, `/api/update/watch`, `/api/update/notice`),
+  `updater.apply_update_github` (empreinte vérifiée AVANT tout, refus sur un checkout git) ;
+  veille `app/update_watch.py` (bandeau admin + audit, n'installe jamais). `get.sh` installe la
+  dernière release (paquet vérifié), sans git.
 
 ## Modèle de plugin « outil »
 ```
