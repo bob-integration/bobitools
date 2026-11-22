@@ -17,7 +17,7 @@ titre et le tag de la version publiée : deux sources recopiées à la main fini
 diverger, et c'est le genre d'écart que personne ne remarque avant d'en avoir besoin.
 """
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 
 
 def analyser(v):
@@ -66,6 +66,20 @@ def comparable(courante, minimale):
 
 
 def core_min_de(manifeste):
-    """Version minimale de Bobi.Tools exigée par ce manifeste (plugin ou service), ou ""."""
-    req = (manifeste or {}).get("requires") or {}
-    return str(req.get("core_min") or "").strip()
+    """Version minimale de Bobi.Tools exigée par ce manifeste (plugin ou service), ou "".
+
+    Clé `core_min` à la RACINE du manifeste (`"core_min": "1.1.0"`). Chez les outils,
+    `requires` est la LISTE des outils requis ([{type, reason}]) : on n'y range pas la
+    version du cœur. La forme de Bobi.Studio (`requires: {core_min}`) reste lue."""
+    m = manifeste or {}
+    req = m.get("requires")
+    v = m.get("core_min") or (req.get("core_min") if isinstance(req, dict) else "")
+    return str(v or "").strip()
+
+
+def exigence_non_tenue(manifeste):
+    """Message lisible si ce manifeste exige un Bobi.Tools plus récent que celui-ci, sinon ""."""
+    cm = core_min_de(manifeste)
+    if au_moins(VERSION, cm):
+        return ""
+    return "demande Bobi.Tools %s ou plus récent ; cette instance est en %s" % (cm, VERSION)

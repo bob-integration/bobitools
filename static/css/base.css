@@ -810,6 +810,47 @@ label { color: var(--text-muted); font-size: 0.78em; display: block; margin-bott
 }
 .tabs.set-subnav[hidden] { display: none; }
 
+/* ─── Bande de sous-menu, collée sous la barre du haut ─── */
+/* Reprise de Bobi.Studio (`.subnav-deck`, base.css + static/subnav_deck.js). Les onglets d'une
+   page — les outils d'une section — forment une SECONDE BANDE collée sous la barre du haut, dont
+   ils sont le sous-menu ; un chevron la relie à l'entrée allumée. Le nom de la section n'est donc
+   plus écrit dans la page : la barre du haut le dit déjà, et sa ligne (titre + sous-titre) coûtait
+   une centaine de pixels de hauteur à chaque outil.
+   Sur ces pages seulement, la barre perd ses coins du bas et son ombre tant qu'elle est DÉPLOYÉE ;
+   condensée (page défilée, la bande — non collante — est passée sous elle), elle retrouve son
+   dessin. Sa marge reste à 0 dans les deux états : la faire varier avec `condensed` changerait la
+   hauteur au-dessus du contenu et relancerait la boucle d'ancrage de défilement décrite dans
+   layout.html.
+   ⚠ La bande doit être le PREMIER élément du contenu de page, sinon elle n'est pas collée sous la
+   barre. Placée APRÈS `.tabs` : à spécificité égale, elle doit gagner.
+   Elle REVIENT À LA LIGNE, contrairement à Studio : une section de Bobi.Tools porte jusqu'à une
+   dizaine d'outils (Réseau en a neuf). */
+body:has(.subnav-deck) .topnav { margin-bottom: 0; }
+body:has(.subnav-deck) .topnav:not(.condensed) {
+    border-bottom-left-radius: 0; border-bottom-right-radius: 0; box-shadow: none; }
+.subnav-deck { position: relative; display: flex; align-items: center; flex-wrap: wrap;
+    gap: 2px; min-width: 0; margin: 0 0 var(--space-4); padding: 4px 10px;
+    background: var(--bg); border: 1px solid var(--border); border-top: 0;
+    border-radius: 0 0 var(--radius) var(--radius); }
+.subnav-deck > .tab { min-height: 44px; display: inline-flex; align-items: center; position: relative;
+    padding: 0 14px; border: 0; background: transparent; border-radius: var(--radius-small);
+    color: var(--text-muted); text-decoration: none; }
+.subnav-deck > .tab:hover { background: var(--bg-hover); color: var(--text); text-decoration: none; }
+.subnav-deck > a.tab { display: inline-flex; }
+.subnav-deck > .tab.active { background: transparent; color: var(--text-strong); font-weight: 600; }
+.subnav-deck > .tab.active::after { content: ""; position: absolute; left: 12px; right: 12px; bottom: 5px;
+    height: 2px; border-radius: 2px; background: var(--accent); }
+/* Chevron, posé et REPOSITIONNÉ par static/subnav_deck.js (mesure, cf. son en-tête). */
+.subnav-deck-notch { position: absolute; top: 0; width: 0; height: 0; transform: translateX(-50%);
+    border: 6px solid transparent; border-top-color: var(--border); pointer-events: none; }
+.subnav-deck-notch[hidden] { display: none; }
+
+/* Visible des seuls lecteurs d'écran (titre de page conservé hors écran). */
+.sr-only {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
 /* ─── Utilitaires partagés (extraits des styles inline) ─── */
 /* Conteneur scrollable pour tables larges : évite le débordement de page sur
    petit écran (les colonnes gardent leur largeur, la table défile). */

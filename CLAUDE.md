@@ -81,6 +81,8 @@ plugins/<type>/
                   badge{label,class,oklch}, ui{page_html,page_js,page_css},
                   docker{image,build,port,env_settings,shared_volumes}?  config_schema?
                   requires[{type,reason}]?  ← DÉPENDANCE DURE à un autre outil
+                  core_min?  ← version MINIMALE de Bobi.Tools (`app/version.py`) : paquet
+                               refusé à l'installation, avertissement dans la barre d'état
   page.html     ← fragment UI monté pleine page
   page.js       ← window.BTTools["<type>"] = { mount(el, ctx), unmount() }
   page.css      ← optionnel

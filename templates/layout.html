@@ -28,6 +28,41 @@
             }
             return Promise.resolve(fallback());
         };
+        // Confirmation DESSINÉE dans la page → Promise<boolean>. Remplace `confirm()` : après
+        // de nombreux dialogues natifs, Safari propose de les bloquer, puis répond « Annuler »
+        // sans rien montrer — vu le 2026-11-15 : « Migrer » et « Redémarrer » ne faisaient plus
+        // rien, aucune requête n'arrivait au serveur. Défini ici (toujours chargé, avant
+        // scripts.js et les page.js des outils). `margin: auto` : base.css met `* {margin:0}`,
+        // qui collerait la fenêtre en haut à gauche.
+        window.BT = window.BT || {};
+        window.BT.confirm = function(message, opts){
+            const o = opts || {}, tr = (k, fb) => { const v = window.t(k); return v === k ? fb : v; };
+            return new Promise((resolve) => {
+                const d = document.createElement('dialog');
+                d.className = 'bt-confirm';
+                d.style.cssText = 'margin:auto;max-width:min(460px,calc(100vw - 32px));padding:18px 20px;border:1px solid var(--border);'
+                    + 'border-radius:var(--radius);background:var(--bg-elev);color:var(--text);';
+                const p = document.createElement('p');
+                p.style.cssText = 'margin:0 0 16px;white-space:pre-line;line-height:1.4;';
+                p.textContent = message;
+                const bar = document.createElement('div');
+                bar.style.cssText = 'display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;';
+                const no = document.createElement('button'), yes = document.createElement('button');
+                no.type = yes.type = 'button';
+                no.className = 'btn'; no.textContent = o.cancel || tr('js.cancel', 'Annuler');
+                yes.className = 'btn ' + (o.danger ? 'btn-red' : 'btn-blue'); yes.textContent = o.ok || tr('js.ok', 'Confirmer');
+                bar.append(no, yes); d.append(p, bar);
+                let done = false;
+                const finish = (v) => { if (done) return; done = true; try { d.close(); } catch (e) {} d.remove(); resolve(v); };
+                no.onclick = () => finish(false);
+                yes.onclick = () => finish(true);
+                d.addEventListener('cancel', (e) => { e.preventDefault(); finish(false); });   // Échap
+                d.addEventListener('click', (e) => { if (e.target === d) finish(false); });     // clic hors de la fenêtre
+                document.body.appendChild(d);
+                if (typeof d.showModal === 'function') d.showModal(); else d.setAttribute('open', '');
+                yes.focus();
+            });
+        };
     </script>
     <link rel="stylesheet" href="/static/css/base.css?v={{ asset_v('css/base.css') }}">
     <link rel="stylesheet" href="/static/css/nav.css?v={{ asset_v('css/nav.css') }}">
@@ -271,7 +306,7 @@
         }
         refresh(); setInterval(tick, 1000); setInterval(refresh, 30000);
         elBtn.addEventListener('click', async () => {
-            if (!confirm(window.t('js.service.restart_confirm'))) return;
+            if (!(await window.BT.confirm(window.t('js.service.restart_confirm'), { danger: true }))) return;
             elBtn.disabled = true; elUp.textContent = window.t('js.service.restarting');
             try {
                 const r = await fetch('/api/service/restart', {method:'POST'});

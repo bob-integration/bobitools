@@ -892,7 +892,7 @@ const SET_GROUPS = [
   {id: 'general',    tabs: ['appearance', 'users', 'roles']},
   {id: 'outils',     tabs: ['catalogue', 'plugins', 'rules', 'toolcfg', 'services']},
   {id: 'protocoles', tabs: ['controllers', 'emberplus', 'tsl', 'swp08']},
-  {id: 'systeme',    tabs: ['network', 'backup', 'deploy', 'mail', 'audit', 'i18n']},
+  {id: 'systeme',    tabs: ['network', 'backup', 'deploy', 'mail', 'ntfy', 'audit', 'i18n']},
 ];
 const tabBtn = (t) => document.querySelector('#set-tabs .tab[data-t="'+t+'"]');
 SET_GROUPS.forEach(g => { g.tabs = g.tabs.filter(tabBtn); });

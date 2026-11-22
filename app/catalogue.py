@@ -224,8 +224,11 @@ def _construire(org):
         installee = _version_installee(genre, type_)
         git = installee is not None and gere_par_git(genre, type_)
         dispo = man.get("version") or ""
-        requires = [r.get("type") for r in (man.get("requires") or [])
+        req = man.get("requires")
+        requires = [r.get("type") for r in (req if isinstance(req, list) else [])
                     if isinstance(r, dict) and r.get("type")] if genre == "plugin" else []
+        from .version import exigence_non_tenue
+        trop = exigence_non_tenue(man)
         entrees.append({
             "genre": genre, "type": type_, "depot": nom,
             "tag": tag or "", "ref": ref, "dev": not tag,
@@ -236,8 +239,9 @@ def _construire(org):
             "etat": "git" if git else _comparer(dispo, installee),
             "url": d.get("html_url") or "",
             "requires": requires,
-            "installable": bool(man) and not git,
-            "indisponible": "" if man else (err or "manifeste illisible"),
+            "installable": bool(man) and not git and not trop,
+            "core_trop_ancien": trop,
+            "indisponible": trop or ("" if man else (err or "manifeste illisible")),
         })
     entrees.sort(key=lambda e: (e["genre"], e["label"].lower()))
     return entrees
@@ -288,7 +292,7 @@ def _rafraichir_installes(entrees):
         git = inst is not None and gere_par_git(e["genre"], e["type"])
         e["version_installee"] = inst
         e["etat"] = "git" if git else _comparer(e["version_dispo"], inst)
-        e["installable"] = bool(e["version_dispo"]) and not git
+        e["installable"] = bool(e["version_dispo"]) and not git and not e.get("core_trop_ancien")
         out.append(e)
     return out
 

@@ -544,8 +544,65 @@ def _identity_headers(type_):
     que par lui, sur 127.0.0.1). Elle sert à l'outil pour journaliser et adapter son UI."""
     u = current_user() or {}
     rs = droits.rights_summary(type_, u, has_perm)
+    # Les groupes (ids) : un outil qui partage ses objets « avec le groupe X » doit savoir
+    # si l'appelant en est. En-tête absent = cœur d'avant ; présent et vide = aucun groupe.
     return {"X-BT-User": str(u.get("username") or ""), "X-BT-User-Id": str(u.get("id") or ""),
-            "X-BT-Role": str(u.get("role") or ""), "X-BT-Perms": ",".join(rs["granted"])}
+            "X-BT-Role": str(u.get("role") or ""), "X-BT-Perms": ",".join(rs["granted"]),
+            "X-BT-Groups": ",".join(str(i) for i in sorted(user_group_ids(u))) if u else ""}
+
+
+# Délai d'inactivité du relais d'un envoi de fichier : par opération réseau, pas pour
+# l'envoi entier (un clip de 2 Go met le temps qu'il met ; un relais muet 5 min, non).
+_UPLOAD_IDLE_TIMEOUT = 300
+
+
+def _proxy_stream(type_, base, method, subpath):
+    """Relaie un corps binaire VERS le conteneur sans jamais le tenir en mémoire.
+
+    `requests` ne convient pas ici : faute de longueur connue sur `request.stream`, il
+    passerait en `Transfer-Encoding: chunked`, que le serveur stdlib des conteneurs ne
+    décode pas. On parle donc HTTP/1.1 à la main, Content-Length en tête, par blocs d'1 Mo.
+    """
+    import http.client
+    from urllib.parse import urlsplit, urlencode, quote
+    length = request.content_length
+    if length is None:
+        return jsonify({"error": "envoi sans longueur (Content-Length requis)"}), 411
+    u = urlsplit(base)
+    path = (u.path.rstrip("/") + "/" + quote(subpath, safe="/"))
+    if request.args:
+        path += "?" + urlencode(list(request.args.items(multi=True)))
+    conn = http.client.HTTPConnection(u.hostname, u.port, timeout=_UPLOAD_IDLE_TIMEOUT)
+    try:
+        conn.putrequest(method, path, skip_accept_encoding=True)
+        for k, v in _identity_headers(type_).items():
+            conn.putheader(k, v.encode("latin-1", "replace").decode("latin-1"))
+        conn.putheader("Content-Type", "application/octet-stream")
+        conn.putheader("Content-Length", str(length))
+        conn.endheaders()
+        remaining, coupe = length, False
+        while remaining > 0:
+            chunk = request.stream.read(min(1 << 20, remaining))
+            if not chunk:
+                break                       # le navigateur a abandonné en route
+            try:
+                conn.send(chunk)
+            except OSError:
+                coupe = True                # le conteneur a répondu (refus) avant la fin
+                break
+            remaining -= len(chunk)
+        if remaining and not coupe:
+            return jsonify({"error": "envoi interrompu par le navigateur"}), 400
+        up = conn.getresponse()
+        body = up.read()
+        ct = up.getheader("Content-Type", "application/json")
+        if up.status < 400:
+            _ember_notify(type_)
+        return Response(body, status=up.status, mimetype=ct.split(";")[0])
+    except (OSError, http.client.HTTPException) as e:
+        return jsonify({"error": f"proxy (envoi) : {e}"}), 502
+    finally:
+        conn.close()
 
 
 @bp.route("/api/tools/<type_>/rights")
@@ -674,6 +731,13 @@ def api_tool_dispatch(type_, subpath):
     m = plugins.get(type_)
     if not m:
         abort(404)
+    # Le chemin CONTRÔLÉ doit être le chemin TRANSMIS. `requests` relit `subpath` (déjà
+    # décodé par Flask) pour bâtir l'URL du conteneur : un `?`, un `#`, un `;` ou un
+    # segment `.`/`..` y changeraient la route atteinte APRÈS le contrôle des droits
+    # (`live/run%23x` contrôlé comme une route inconnue, puis livré à `live/run`). On
+    # refuse plutôt que de deviner.
+    if any(c in subpath for c in "?#;") or any(s in (".", "..") for s in subpath.split("/")):
+        return jsonify({"error": "chemin invalide"}), 400
     method = request.method
     # Un outil DÉSACTIVÉ n'accepte plus d'écriture. Jusqu'ici le drapeau ne faisait que le
     # masquer du lanceur : une page déjà ouverte, un onglet oublié ou un appel direct
@@ -688,7 +752,15 @@ def api_tool_dispatch(type_, subpath):
     # l'outil est explicitement ouvert pourrait déclencher des actions mutatives.
     if method != "GET" and not has_perm("tools.use"):
         return jsonify({"error": "forbidden"}), 403
-    payload = _json() if method in ("POST", "PUT") else dict(request.args)
+    # Un ENVOI DE FICHIER (corps application/octet-stream) ne se lit pas : il peut peser
+    # des gigaoctets (clips vidéo) et `_json()` le chargerait en mémoire. Ses paramètres
+    # passent alors par la query string, qui tient lieu de payload pour les droits fins et
+    # l'audit ; le corps est relayé tel quel au conteneur, par morceaux (`_proxy_stream`).
+    upload = method in ("POST", "PUT") and request.mimetype == "application/octet-stream"
+    if upload:
+        payload = request.args.to_dict()
+    else:
+        payload = _json() if method in ("POST", "PUT") else dict(request.args)
     # Droits FINS (permission déclarée par l'outil + périmètre), vérifiés ICI, avant de
     # transmettre : un conteneur n'a pas à être cru sur parole. Cf. app/droits.py.
     if method != "GET":
@@ -711,6 +783,8 @@ def api_tool_dispatch(type_, subpath):
         base = deploy.proxy_base(type_)
         if not base:
             return jsonify({"error": "outil non démarré"}), 503
+        if upload:
+            return _proxy_stream(type_, base, method, subpath)
         try:
             up = requests.request(method, f"{base}/{subpath}",
                                   params=request.args if method == "GET" else None,

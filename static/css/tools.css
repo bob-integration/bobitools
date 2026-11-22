@@ -11,8 +11,9 @@
 .toast.warning { background: var(--status-warning-bg); color: var(--status-warning-fg); }
 .toast.error { background: var(--status-stopped-bg); color: var(--status-stopped-fg); }
 
-/* ── Onglets de section (réutilise .tabs/.tab de base.css) ───────────── */
-.tp-tabs { display: flex; gap: 4px; flex-wrap: wrap; margin: 8px 0 14px; }
+/* ── Onglets de section ──────────────────────────────────────────────
+   Ils vivent dans la BANDE collée sous la barre du haut (`.subnav-deck`, base.css) : rien à
+   styler ici, hormis le lien « plein écran » posé en bout de bande. */
 
 /* ── Zone de montage de l'UI d'un outil ─────────────────────────────── */
 .bt-tool-host { display: flex; flex-direction: column; gap: 10px; }
@@ -63,10 +64,11 @@ body.page-focus .app-footer { padding-left: 18px; padding-right: 18px; }
 
 /* ── Shell de test ──────────────────────────────────────────────────── */
 /* Pleine largeur : les outils (surtout le Plan, dense) utilisent toute la page. */
-.section-wrap { padding: 18px 22px; }
-.section-wrap h1 { margin: 0 0 2px; }
-.section-sub { color: var(--text-muted); font-size: 0.88em; margin-bottom: 6px; }
-.section-open { margin-left: auto; font-size: 0.85em; text-decoration: none; color: var(--accent); }
+/* Le nom de la section n'est plus écrit dans la page (cf. `.subnav-deck`) : le contenu
+   commence directement sous la bande, aligné sur ses bords. */
+.section-wrap { padding: 0 2px 18px; }
+.section-open { margin-left: auto; padding: 0 6px; font-size: 0.85em; white-space: nowrap;
+    text-decoration: none; color: var(--accent); }
 
 /* ── Lanceur (page d'accueil) ───────────────────────────────────────────
    Cartes d'outils : grammaire flat Studio (border + fond au hover, jamais de

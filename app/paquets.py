@@ -11,7 +11,7 @@ import os
 import tempfile
 import zipfile
 
-from . import catalogue, core_plugins, plugins
+from . import catalogue, core_plugins, plugins, version
 
 
 def _find_manifest_dir(root, manifest="plugin.json"):
@@ -52,6 +52,10 @@ def installer_archive(data, genre, activate, attendu=None):
         if err:
             raise ValueError(err)
         ident = man.get("type") if genre == "plugin" else man.get("id")
+        trop = version.exigence_non_tenue(man)
+        if trop:
+            raise ValueError(f"« {ident} » v{man.get('version') or '?'} {trop} : "
+                             "mettez d'abord Bobi.Tools à jour")
         if attendu and ident != attendu:
             raise ValueError(f"le paquet annonce « {ident} », le catalogue attendait « {attendu} »")
         if catalogue.gere_par_git(genre, ident):

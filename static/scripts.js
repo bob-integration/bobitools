@@ -188,12 +188,17 @@
             // Dépendance déclarée mais non installée. Docker crée à la volée un volume vide
             // pour un outil absent : sans cet avertissement, le consommateur démarrerait et
             // paraîtrait sain en ne voyant rien du tout.
-            const missing = st.missing_requirements || [];
-            const missNote = missing.length
+            // Bobi.Tools trop ancien pour cet outil (`core_min`) : type réservé « @core ».
+            const coreReq = (st.missing_requirements || []).find((r) => r.type === "@core");
+            const coreNote = coreReq
+                ? '<span class="bt-missing-req">⚠ ' + BT.esc(window.t("js.docker.core_min").replace("{min}", coreReq.core_min).replace("{cur}", coreReq.core)) + "</span>"
+                : "";
+            const missing = (st.missing_requirements || []).filter((r) => r.type !== "@core");
+            const missNote = coreNote + (missing.length
                 ? '<span class="bt-missing-req">⚠ ' + BT.esc(window.t("js.docker.missing_req")) + " : " +
                   missing.map((r) => BT.esc(r.type) + (r.reason ? " (" + BT.esc(r.reason) + ")" : "")).join(", ") +
                   "</span>"
-                : "";
+                : "");
             barEl.innerHTML =
                 '<span class="bt-dot ' + (running ? "running" : "stopped") + '"></span> ' +
                 '<span class="bt-state">' + BT.esc(label) + (st.port ? ' · :' + st.port : "") +
@@ -212,7 +217,9 @@
             if (!running && started) { started = false; BT.unmountTool(type); mountEl.innerHTML = '<div class="tp-mount empty"><div>' + BT.esc(window.t("js.docker.start_hint")) + "</div></div>"; }
         }
         async function act(action, btn) {
-            if (action === "migrate" && !confirm("Migrer l'outil vers la version disponible ?\nLe conteneur sera reconstruit si besoin puis recréé (quelques secondes).")) return;
+            // BT.confirm (layout.html) plutôt que confirm() : Safari peut bloquer les dialogues natifs.
+            const ask = (BT.confirm || ((m) => Promise.resolve(window.confirm(m))));
+            if (action === "migrate" && !(await ask("Migrer l'outil vers la version disponible ?\nLe conteneur sera reconstruit si besoin puis recréé (quelques secondes)."))) return;
             if (btn) btn.disabled = true;
             BT.toast(action === "migrate" ? "Migration en cours…" :
                 window.t("js.docker." + (action === "start" ? "starting" : "stopping")), "info");

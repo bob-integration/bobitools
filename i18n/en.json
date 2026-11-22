@@ -445,6 +445,7 @@
   "js.docker.unavailable": "Docker unavailable on this host.",
   "js.docker.running": "Running",
   "js.docker.stopped": "Stopped",
+  "js.docker.core_min": "Bobi.Tools {min} or newer required (this instance runs {cur}): update Bobi.Tools",
   "js.docker.missing_req": "missing required tool",
   "js.docker.start": "Start",
   "js.docker.stop": "Stop",

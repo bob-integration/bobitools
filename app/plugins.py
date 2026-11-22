@@ -180,7 +180,8 @@ def is_tool(type_):
 def requirements(type_):
     """Dépendances dures déclarées par l'outil : [{"type", "reason"}]."""
     out = []
-    for req in (REGISTRY.get(type_) or {}).get("requires") or []:
+    req_ = (REGISTRY.get(type_) or {}).get("requires")
+    for req in (req_ if isinstance(req_, list) else []):   # forme Studio {core_min} : pas d'outil
         if isinstance(req, str):
             out.append({"type": req, "reason": ""})
         elif isinstance(req, dict) and req.get("type"):
@@ -189,8 +190,17 @@ def requirements(type_):
 
 
 def missing_requirements(type_):
-    """Dépendances déclarées mais absentes du registre (outil non installé)."""
-    return [r for r in requirements(type_) if r["type"] not in REGISTRY]
+    """Dépendances déclarées mais absentes du registre (outil non installé). Un Bobi.Tools
+    trop ancien pour l'outil (`core_min`) y figure aussi, sous le type réservé « @core » :
+    la barre d'état de l'outil le signale (un outil installé avant la mise à jour de son
+    paquet, ou copié à la main, n'est pas passé par le refus à l'installation)."""
+    out = [r for r in requirements(type_) if r["type"] not in REGISTRY]
+    from .version import core_min_de, exigence_non_tenue, VERSION
+    m = REGISTRY.get(type_) or {}
+    trop = exigence_non_tenue(m)
+    if trop:
+        out.append({"type": "@core", "reason": trop, "core_min": core_min_de(m), "core": VERSION})
+    return out
 
 
 def runtime(type_):

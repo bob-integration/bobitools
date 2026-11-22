@@ -133,27 +133,122 @@ def _load_rollback():
         return None
 
 
+ADOPT_DIR = os.path.join(ROOT, "backups", "gitupdate-adopt")   # backups/ : gitignoré
+
+
+def _component_version(path):
+    """Version déclarée par un outil (plugin.json) ou un service (manifest.json), ou ''."""
+    for name in ("plugin.json", "manifest.json"):
+        try:
+            with open(os.path.join(path, name), encoding="utf-8") as f:
+                return str(json.load(f).get("version") or "")
+        except (OSError, ValueError, AttributeError):
+            continue
+    return ""
+
+
 def _prepare_new_submodules():
-    """Un dossier de plugin qui DEVIENT submodule (ex. coffre, 2026-10) garde après le
-    fast-forward son `__pycache__` — ignoré par git, donc jamais supprimé. Le dossier n'est
-    alors pas vide, et `submodule update --init` refuse d'y cloner : la mise à jour échoue,
-    et le plugin disparaît au redémarrage suivant. On retire ce cache — et SEULEMENT lui :
-    s'il reste autre chose dans le dossier, on n'y touche pas (ce serait du travail local)."""
+    """Un dossier qui DEVIENT submodule doit être vide pour que `submodule update --init`
+    y clone. Deux cas :
+
+    - il ne contient qu'un `__pycache__` (ignoré par git, jamais supprimé par le
+      fast-forward ; ex. coffre, 2026-10) : on retire ce cache ;
+    - c'est un OUTIL ou un SERVICE installé jusque-là par import de paquet (plugin.json ou
+      manifest.json ; ex. hyperdeck_clips, 2026-11) : c'est le MÊME composant, qui arrive
+      désormais par GitHub. On déplace le dossier sous backups/ le temps du clone ;
+      `_finish_adoptions` remet ensuite ce que git n'apporte pas (versions archivées,
+      version active d'avant), `_undo_adoptions` le remet tel quel si le clone échoue.
+
+    Tout autre contenu est laissé en place (ce serait du travail local) : git refusera, et
+    l'erreur sera dite. Renvoie la liste des adoptions en cours : [(chemin, rangé, version)]."""
     import shutil
+    adopted = []
     rc, out, _ = _git("config", "-f", ".gitmodules", "--get-regexp", r"submodule\..*\.path")
     if rc != 0:
-        return
+        return adopted
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     for line in out.splitlines():
         parts = line.split(None, 1)
         if len(parts) != 2:
             continue
-        path = os.path.join(ROOT, parts[1].strip())
+        rel = parts[1].strip()
+        path = os.path.join(ROOT, rel)
         if not os.path.isdir(path) or os.path.exists(os.path.join(path, ".git")):
             continue
         contenu = [x for x in os.listdir(path)]
         if contenu and all(x == "__pycache__" for x in contenu):
             shutil.rmtree(os.path.join(path, "__pycache__"), ignore_errors=True)
-            log.info("gitupdate: cache Python retiré de %s (devient submodule)", parts[1])
+            log.info("gitupdate: cache Python retiré de %s (devient submodule)", rel)
+        elif "plugin.json" in contenu or "manifest.json" in contenu:
+            dest = os.path.join(ADOPT_DIR, stamp, rel)
+            try:
+                os.makedirs(os.path.dirname(dest), exist_ok=True)
+                shutil.move(path, dest)
+            except OSError as e:
+                log.warning("gitupdate: %s ne peut pas être déplacé pour devenir submodule : %s", rel, e)
+                continue
+            adopted.append((path, dest, _component_version(dest)))
+            log.info("gitupdate: %s (installé par paquet, v%s) rangé sous %s le temps du clone",
+                     rel, adopted[-1][2] or "?", dest)
+    return adopted
+
+
+def _finish_adoptions(adopted):
+    """Après un clone réussi : le composant venu de GitHub est en place. On y remet les
+    versions archivées du dossier importé (git ne les porte pas : `versions/` est
+    gitignoré) et, si elle diffère, la version active d'avant, rangée sous
+    versions/<ver>/ — comme le fait un import de paquet qui remplace une version."""
+    import shutil
+    for path, dest, old_ver in adopted:
+        if not os.path.exists(os.path.join(path, ".git")):
+            continue                                   # pas cloné : laissé pour l'annulation
+        vdir = os.path.join(path, "versions")
+        vsrc = os.path.join(dest, "versions")
+        if os.path.isdir(vsrc):
+            for v in os.listdir(vsrc):
+                s, d = os.path.join(vsrc, v), os.path.join(vdir, v)
+                if os.path.isdir(s) and not os.path.exists(d):
+                    shutil.copytree(s, d)
+        new_ver = _component_version(path)
+        if old_ver and old_ver != new_ver and not os.path.exists(os.path.join(vdir, old_ver)):
+            keep = os.path.join(vdir, old_ver)
+            os.makedirs(keep, exist_ok=True)
+            for n in os.listdir(dest):
+                if n in ("versions", "__pycache__"):
+                    continue
+                s = os.path.join(dest, n)
+                (shutil.copytree if os.path.isdir(s) else shutil.copy2)(s, os.path.join(keep, n))
+        shutil.rmtree(dest, ignore_errors=True)
+        log.info("gitupdate: %s désormais suivi par GitHub (v%s ; v%s importée gardée dans versions/)",
+                 os.path.relpath(path, ROOT), new_ver or "?", old_ver or "?")
+    _prune_adopt_dir()
+
+
+def _prune_adopt_dir():
+    """Retire les dossiers VIDES laissés sous backups/gitupdate-adopt/ (jamais un contenu)."""
+    for base, _, _ in os.walk(ADOPT_DIR, topdown=False):
+        try:
+            if not os.listdir(base):
+                os.rmdir(base)
+        except OSError:
+            pass
+
+
+def _undo_adoptions(adopted):
+    """Clone raté : on remet chaque dossier importé exactement comme il était."""
+    import shutil
+    for path, dest, _ in adopted:
+        if not os.path.isdir(dest):
+            continue
+        if os.path.exists(path):
+            shutil.rmtree(path, ignore_errors=True)     # clone partiel ou dossier vide laissé par git
+        try:
+            shutil.move(dest, path)
+            log.info("gitupdate: %s remis tel qu'importé (clone impossible)", os.path.relpath(path, ROOT))
+        except OSError as e:
+            log.error("gitupdate: %s n'a pas pu être remis, il reste sous %s : %s",
+                      os.path.relpath(path, ROOT), dest, e)
+    _prune_adopt_dir()
 
 
 def update():
@@ -175,10 +270,12 @@ def update():
     rc, out, err = _git("merge", "--ff-only", _upstream(br), timeout=60)
     if rc != 0:
         return False, f"fast-forward impossible (branche divergente / commits locaux ?) : {err or out}"
-    _prepare_new_submodules()
+    adopted = _prepare_new_submodules()
     rc, out, err = _git("submodule", "update", "--init", "--recursive", timeout=300)
     if rc != 0:
+        _undo_adoptions(adopted)
         return False, f"submodule update a échoué : {err or out}"
+    _finish_adoptions(adopted)
 
     _save_rollback(prev)
     now = _rev("HEAD")
@@ -202,8 +299,9 @@ def rollback():
     rc, out, err = _git("reset", "--hard", prev, timeout=60)
     if rc != 0:
         return False, f"git reset a échoué : {err or out}"
-    _prepare_new_submodules()
-    _git("submodule", "update", "--init", "--recursive", timeout=300)
+    adopted = _prepare_new_submodules()
+    rc, _, _ = _git("submodule", "update", "--init", "--recursive", timeout=300)
+    (_finish_adoptions if rc == 0 else _undo_adoptions)(adopted)
     updater.clear_pending()
     updater.record_deploy(prev[:12], _desc("HEAD"))
     updater.restart_service()
